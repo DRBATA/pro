@@ -64,9 +64,14 @@ export function RegisterForm() {
   // Update body type options when sex changes
   useEffect(() => {
     const sex = form.watch("sex") as 'male' | 'female'
-    setBodyTypeOptions(getBodyTypeOptions(sex))
-    // Reset body type when sex changes
-    form.setValue("bodyType", undefined)
+    const options = getBodyTypeOptions(sex)
+    setBodyTypeOptions(options)
+    
+    // Set default body type based on sex when first loaded or when sex changes
+    if (options.length > 0) {
+      const defaultBodyType = sex === 'male' ? 'muscular' : 'toned'
+      form.setValue("bodyType", defaultBodyType)
+    }
   }, [form.watch("sex")])
 
   async function onSubmit(data: RegisterFormValues) {
@@ -212,8 +217,11 @@ export function RegisterForm() {
                   <span className="text-xs text-cyan-400 opacity-80">Used for precise body composition analysis</span>
                 </div>
                 <RadioGroup
-                  defaultValue="male"
-                  onValueChange={(value) => form.setValue("sex", value as "male" | "female")}
+                  value={form.watch("sex")}
+                  onValueChange={(value) => {
+                    form.setValue("sex", value as "male" | "female");
+                    form.clearErrors("sex");
+                  }}
                   className="flex flex-col space-y-1"
                 >
                   <div className="flex items-center space-x-2">
@@ -236,7 +244,11 @@ export function RegisterForm() {
                   <span className="text-xs text-cyan-400 opacity-80">Determines your lean body mass calculation</span>
                 </div>
                 <RadioGroup
-                  onValueChange={(value) => form.setValue("bodyType", value)}
+                  value={form.watch("bodyType")}
+                  onValueChange={(value) => {
+                    form.setValue("bodyType", value);
+                    form.clearErrors("bodyType");
+                  }}
                   className="flex flex-col space-y-1"
                 >
                   {bodyTypeOptions.map((option) => (
@@ -266,8 +278,11 @@ export function RegisterForm() {
             <div className="space-y-2">
               <Label className="text-slate-200">Preferred Contact Method</Label>
               <RadioGroup
-                onValueChange={(value) => form.setValue("contactPreference", value as "email" | "whatsapp" | "phone" | "text")}
-                defaultValue="email"
+                value={form.watch("contactPreference")}
+                onValueChange={(value) => {
+                  form.setValue("contactPreference", value as "email" | "whatsapp" | "phone" | "text");
+                  form.clearErrors("contactPreference");
+                }}
                 className="flex flex-col space-y-1"
               >
                 <div className="flex items-center space-x-2">

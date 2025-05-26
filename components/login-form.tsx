@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
-import { User } from "lucide-react"
+import { User, Droplets } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -30,6 +30,8 @@ export function LoginForm() {
   
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loginSuccess, setLoginSuccess] = useState(false)
+  const [userData, setUserData] = useState<{isStaff: boolean} | null>(null)
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -52,11 +54,13 @@ export function LoginForm() {
         return
       }
 
-      // Login successful - redirect based on user type
-      if (isStaff) {
-        router.push("/staff")
-      } else {
-        router.push("/dashboard")
+      // Login successful - show success message and dashboard button
+      setLoginSuccess(true)
+      setUserData({ isStaff: isStaff || false })
+      // Store user data in local storage for persistence
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('userLoggedIn', 'true')
+        localStorage.setItem('userIsStaff', isStaff ? 'true' : 'false')
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.")
@@ -125,26 +129,47 @@ export function LoginForm() {
               </div>
             )}
             
-            <Button 
-              type="submit" 
-              className="w-full bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30 py-6"
-              disabled={isLoading}
-              style={{ color: "#00FFFF" }}
-            >
-              {isLoading ? (
-                <div className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            {loginSuccess ? (
+              <div className="space-y-4">
+                <div className="bg-green-900/20 border border-green-500/50 text-green-300 rounded-md p-3 text-sm flex items-center">
+                  <svg className="h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Logging in
+                  Login successful! You can now access your dashboard.
                 </div>
-              ) : (
-                <div className="flex items-center">
-                  <User className="h-5 w-5 mr-3" /> Login
-                </div>
-              )}
-            </Button>
+                
+                <Button 
+                  className="w-full bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30 py-6"
+                  style={{ color: "#00FFFF" }}
+                  onClick={() => router.push(userData?.isStaff ? "/staff" : "/dashboard")}
+                >
+                  <div className="flex items-center">
+                    <Droplets className="h-5 w-5 mr-3" /> Go to {userData?.isStaff ? "Staff" : "User"} Dashboard
+                  </div>
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                type="submit" 
+                className="w-full bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30 py-6"
+                disabled={isLoading}
+                style={{ color: "#00FFFF" }}
+              >
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Logging in
+                  </div>
+                ) : (
+                  <div className="flex items-center">
+                    <User className="h-5 w-5 mr-3" /> Login
+                  </div>
+                )}
+              </Button>
+            )}
           </form>
         </CardContent>
         <CardFooter>

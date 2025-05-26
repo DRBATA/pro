@@ -8,7 +8,10 @@ CREATE TABLE users (
   email TEXT UNIQUE NOT NULL,
   name TEXT,
   weight DECIMAL(5,2) NOT NULL, -- kg with 2 decimal places
-  body_type TEXT NOT NULL CHECK (body_type IN ('muscular', 'average', 'stocky')),
+  sex TEXT NOT NULL CHECK (sex IN ('male', 'female')),
+  body_type TEXT NOT NULL CHECK (body_type IN ('low', 'average', 'high')),
+  phone_number TEXT,
+  contact_preference TEXT DEFAULT 'email' CHECK (contact_preference IN ('email', 'whatsapp', 'phone', 'text')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -134,7 +137,10 @@ export interface User {
   email: string
   name?: string
   weight: number
-  body_type: "muscular" | "average" | "stocky"
+  sex: "male" | "female"
+  body_type: "low" | "average" | "high"
+  phone_number?: string
+  contact_preference?: "email" | "whatsapp" | "phone" | "text"
   created_at: string
   updated_at: string
 }

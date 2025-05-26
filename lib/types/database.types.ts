@@ -5,7 +5,10 @@ export type User = {
   email: string
   name?: string
   weight: number
-  body_type: "muscular" | "average" | "stocky"
+  sex: "male" | "female"
+  body_type: "muscular" | "average" | "stocky" | "toned" | "curvy" // Different options based on sex
+  phone_number?: string
+  contact_preference?: "email" | "whatsapp" | "phone" | "text"
   created_at: string
   updated_at: string
 }
@@ -15,12 +18,17 @@ export type HydrationEvent = {
   user_id: string
   event_date: string
   event_time: string
-  event_type: "water" | "electrolyte" | "protein" | "workout"
-  amount_ml?: number
-  amount_g?: number
+  event_type: "water" | "electrolyte" | "protein" | "workout" | "food"
+  amount?: number // General amount field (ml for liquids, g for solids)
+  amount_ml?: number // Deprecated: use amount instead
+  amount_g?: number // Deprecated: use amount instead
   pre_weight?: number
   post_weight?: number
   description?: string
+  activity_type?: string // Type of activity for workout events
+  intensity?: "light" | "moderate" | "intense" // Intensity of workout
+  duration?: number // Duration in minutes
+  food_type?: string // Type of food for food events
   created_at: string
 }
 

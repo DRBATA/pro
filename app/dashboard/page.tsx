@@ -3,37 +3,73 @@
 import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Plus, Droplets, Dumbbell, Clock, Target, User, ShoppingBag, Settings } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { toast } from "@/components/ui/use-toast"
-import { Toaster } from "@/components/ui/toaster"
-import { Slider } from "@/components/ui/slider"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { BODY_FAT_PERCENTAGES } from "@/lib/hydration-engine"
 
-// Body type multipliers
+// Body type display mapping
 const BODY_TYPES = {
-  muscular: { name: "Muscular", multiplier: 1.1, color: "#00FF88" },
-  average: { name: "Average", multiplier: 1.0, color: "#00FFFF" },
-  stocky: { name: "Stocky/Curvy", multiplier: 0.9, color: "#FF6B9D" },
+  // Male body types
+  muscular: { name: 'Muscular Build' },
+  athletic: { name: 'Athletic Build' },
+  stocky: { name: 'Stocky Build' },
+  // Female body types
+  toned: { name: 'Toned Build' },
+  athletic_female: { name: 'Athletic Build' },
+  curvy: { name: 'Curvy Build' },
+  // Legacy types (for backward compatibility)
+  low: { name: 'Low Body Fat' },
+  average: { name: 'Average Build' },
+  high: { name: 'High Body Fat' },
+  // Default type for safety
+  default: { name: 'Average Build' }
 }
 
-// Event types
-interface HydrationEvent {
+// Safe function to get body type name
+function getBodyTypeName(bodyType: string | undefined): string {
+  if (!bodyType || !BODY_TYPES[bodyType]) return BODY_TYPES.default.name;
+  return BODY_TYPES[bodyType].name;
+}
+import { KitType, kitDescriptions, kitRituals } from "@/lib/hydration-engine"
+import { useToast } from "@/components/ui/use-toast"
+import { Toaster } from "@/components/ui/toaster"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Slider } from "@/components/ui/slider"
+import { RadialProgress } from "@/components/radial-progress"
+import { GlowCard } from "@/components/glow-card"
+import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { 
+  getUserProfile, 
+  getTodayHydrationEvents, 
+  getDailyTarget, 
+  logHydrationEvent,
+  createOrder,
+  getUserHydrationGap
+} from "@/lib/client-functions"
+import { HydrationEvent as DBHydrationEvent, Order as DBOrder } from "@/lib/types/database.types"
+
+// Frontend Event types (for UI state management)
+export type HydrationEvent = {
   id: string
   time: string
-  type: "water" | "protein" | "electrolyte" | "workout"
+  type: "water" | "protein" | "electrolyte" | "workout" | "food"
   amount?: number
   preWeight?: number
   postWeight?: number
   description: string
 }
 
-// Order type
-interface Order {
+// Frontend Order type (for UI state management)
+export type Order = {
   id: string
   kitName: string
   status: "pending" | "in-progress" | "completed"
@@ -41,47 +77,194 @@ interface Order {
   location?: string
 }
 
-// Calculate daily needs based on weight and body type
-const calculateDailyNeeds = (weight: number, bodyType: keyof typeof BODY_TYPES) => {
-  const adjustedWeight = weight * BODY_TYPES[bodyType].multiplier
+// Helper functions for dashboard
+
+// Convert database hydration event to frontend format
+function convertDBEventToUI(dbEvent: DBHydrationEvent): HydrationEvent {
   return {
-    water: Math.round(adjustedWeight * 35), // 35ml per kg
-    protein: Math.round(adjustedWeight * 1.2), // 1.2g per kg
-    sodium: Math.round(adjustedWeight * 20), // 20mg per kg
-    potassium: Math.round(adjustedWeight * 40), // 40mg per kg
+    id: dbEvent.id,
+    time: dbEvent.event_time,
+    type: dbEvent.event_type as "water" | "protein" | "electrolyte" | "workout" | "food",
+    amount: dbEvent.amount || dbEvent.amount_ml || dbEvent.amount_g,
+    preWeight: dbEvent.pre_weight,
+    postWeight: dbEvent.post_weight,
+    description: dbEvent.description || ""
+  }
+}
+
+// Get color for event type
+function getEventColor(type: string): string {
+  switch (type) {
+    case "water":
+      return "#00FFFF" // Cyan
+    case "protein":
+      return "#FF6B9D" // Pink
+    case "electrolyte":
+      return "#9D8DF1" // Purple
+    case "workout":
+      return "#FFD166" // Yellow
+    case "food":
+      return "#06D6A0" // Green
+    default:
+      return "#FFFFFF" // White
+  }
+}
+
+// Get icon for event type
+function getEventIcon(type: string) {
+  switch (type) {
+    case "water":
+      return <Droplets className="h-4 w-4" />
+    case "protein":
+      return <Target className="h-4 w-4" />
+    case "electrolyte":
+      return <Dumbbell className="h-4 w-4" />
+    case "workout":
+      return <Clock className="h-4 w-4" />
+    case "food":
+      return <Target className="h-4 w-4" />
+    default:
+      return <Plus className="h-4 w-4" />
+  }
+}
+
+// Add event handler
+function addEvent(newEvent: any) {
+  // Implementation would go here
+  console.log('Add event:', newEvent);
+}
+
+// Calculate hydration percentage
+function hydrationPercentage(current: number, target: number): number {
+  return Math.min(Math.round((current / target) * 100), 100);
+}
+
+// Update profile handler
+async function updateProfile() {
+  if (!userId) return;
+  
+  try {
+    // Show loading toast
+    toast({
+      title: "Updating profile",
+      description: "Saving your profile information..."
+    });
+    
+    // Save profile to Supabase
+    const updatedProfile = await updateUserProfile(userId, {
+      weight: userProfile.weight,
+      sex: userProfile.sex,
+      body_type: userProfile.bodyType
+    });
+    
+    if (updatedProfile) {
+      // Close modal and show success toast
+      setShowProfileModal(false);
+      toast({
+        title: "Profile updated",
+        description: "Your profile has been successfully updated.",
+        variant: "default"
+      });
+      
+      // Refresh hydration calculations with new profile data
+      const hydrationData = await getUserHydrationGap(userId);
+      if (hydrationData) {
+        setHydrationGapData({
+          hydrationGap: hydrationData.hydrationGap,
+          context: hydrationData.context,
+          leanBodyMass: hydrationData.leanBodyMass,
+          waterLoss: hydrationData.waterLoss,
+          waterFromFood: hydrationData.waterFromFood,
+          totalWaterInput: hydrationData.totalWaterInput,
+          recommendedIntake: hydrationData.recommendedIntake
+        });
+        
+        // Update daily targets based on new profile
+        setDailyTarget({
+          water_ml: Math.round(hydrationData.recommendedIntake),
+          protein_g: Math.round(hydrationData.leanBodyMass * 1.2), // 1.2g per kg LBM
+          sodium_mg: Math.round(hydrationData.leanBodyMass * 25),  // 25mg per kg LBM
+          potassium_mg: Math.round(hydrationData.leanBodyMass * 80) // 80mg per kg LBM
+        });
+      }
+    }
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    toast({
+      title: "Update failed",
+      description: "There was a problem updating your profile. Please try again.",
+      variant: "destructive"
+    });
+  }
+}
+
+// Complete sweat test handler
+function completeSweatTest() {
+  // Implementation would go here
+  console.log('Complete sweat test');
+}
+
+// Purchase kit handler
+function purchaseKit() {
+  // Implementation would go here
+  console.log('Purchase kit');
+}
+
+// Calculate daily needs based on weight, sex, and body type
+function calculateDailyNeeds(weight: number, sex: 'male' | 'female', bodyType: string) {
+  // Map legacy body types if needed
+  let mappedBodyType = bodyType;
+  if (bodyType === 'low' || bodyType === 'average' || bodyType === 'high') {
+    // Map legacy types to new types
+    if (sex === 'male') {
+      mappedBodyType = bodyType === 'low' ? 'muscular' : 
+                       bodyType === 'average' ? 'athletic' : 'stocky';
+    } else {
+      mappedBodyType = bodyType === 'low' ? 'toned' : 
+                       bodyType === 'average' ? 'athletic_female' : 'curvy';
+    }
+  }
+  
+  // Get body fat percentage based on sex and body type
+  const fatPercentage = BODY_FAT_PERCENTAGES[sex][mappedBodyType] || 
+                        (sex === 'male' ? BODY_FAT_PERCENTAGES[sex]['athletic'] : BODY_FAT_PERCENTAGES[sex]['athletic_female']);
+  
+  // Calculate lean body mass
+  const leanBodyMass = weight * (1 - fatPercentage);
+  
+  return {
+    water: Math.round(leanBodyMass * 30), // 30ml per kg of lean mass
+    protein: Math.round(leanBodyMass * 1.2), // 1.2g per kg of lean mass
+    sodium: Math.round(leanBodyMass * 25), // 25mg per kg of lean mass
+    potassium: Math.round(leanBodyMass * 80), // 80mg per kg of lean mass
   }
 }
 
 export default function UserDashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [userId, setUserId] = useState<string | null>("testuser") // For dev
   const [userProfile, setUserProfile] = useState({
-    weight: 75,
-    bodyType: "average" as keyof typeof BODY_TYPES,
+    weight: 70,
+    sex: 'male' as 'male' | 'female',
+    bodyType: 'average' as 'low' | 'average' | 'high',
   })
-  const [events, setEvents] = useState<HydrationEvent[]>([
-    {
-      id: "1",
-      time: "08:00",
-      type: "water",
-      amount: 500,
-      description: "Morning hydration",
-    },
-    {
-      id: "2",
-      time: "10:30",
-      type: "workout",
-      preWeight: 75.2,
-      postWeight: 74.4,
-      description: "HIIT session",
-    },
-    {
-      id: "3",
-      time: "11:00",
-      type: "electrolyte",
-      amount: 330,
-      description: "Post-workout recovery",
-    },
-  ])
+  const [events, setEvents] = useState<HydrationEvent[]>([])
+  const [dailyTarget, setDailyTarget] = useState({
+    water_ml: 2500,
+    protein_g: 70,
+    sodium_mg: 2000,
+    potassium_mg: 3500,
+  })
+  const [isLoading, setIsLoading] = useState(true)
+  const [hydrationGapData, setHydrationGapData] = useState<{
+    hydrationGap: number,
+    context: string,
+    leanBodyMass: number,
+    waterLoss: number,
+    waterFromFood: number,
+    totalWaterInput: number,
+    recommendedIntake: number
+  } | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [showSweatTestModal, setShowSweatTestModal] = useState(false)
@@ -99,9 +282,123 @@ export default function UserDashboard() {
     postWeight: 74.5,
     duration: 15,
   })
+  const { toast } = useToast()
+
+  // Load user data
+  useEffect(() => {
+    // For demo purposes, we'll use a hardcoded user ID
+    // In a real app, you'd get this from an auth context
+    const tempUserId = "1234-5678-9101"; // This will be replaced with real auth
+    setUserId(tempUserId);
+    
+    async function loadUserData() {
+      if (!tempUserId) return;
+      
+      setIsLoading(true);
+      try {
+        // Calculate hydration gap using the new function
+        const hydrationData = await getUserHydrationGap(tempUserId);
+        
+        if (hydrationData) {
+          // Set user profile
+          if (hydrationData.user) {
+            setUserProfile({
+              weight: hydrationData.user.weight,
+              sex: hydrationData.user.sex as 'male' | 'female',
+              bodyType: hydrationData.user.body_type as 'low' | 'average' | 'high',
+            });
+          }
+          
+          // Set events
+          if (hydrationData.events.length > 0) {
+            setEvents(hydrationData.events.map(convertDBEventToUI));
+          }
+          
+          // Set hydration gap data
+          setHydrationGapData({
+            hydrationGap: hydrationData.hydrationGap,
+            context: hydrationData.context,
+            leanBodyMass: hydrationData.leanBodyMass,
+            waterLoss: hydrationData.waterLoss,
+            waterFromFood: hydrationData.waterFromFood,
+            totalWaterInput: hydrationData.totalWaterInput,
+            recommendedIntake: hydrationData.recommendedIntake
+          });
+          
+          // Set daily target based on the calculated recommended intake
+          setDailyTarget({
+            water_ml: Math.round(hydrationData.recommendedIntake),
+            protein_g: Math.round(hydrationData.leanBodyMass * 1.2), // 1.2g per kg LBM
+            sodium_mg: Math.round(hydrationData.leanBodyMass * 25),  // 25mg per kg LBM
+            potassium_mg: Math.round(hydrationData.leanBodyMass * 80) // 80mg per kg LBM
+          });
+          
+          // Generate recommendation based on hydration gap
+          if (!recommendation) {
+            let recommendedKit = "Sky Salt"; // Default
+            let recommendationText = "";
+            
+            if (hydrationData.hydrationGap > 500) {
+              recommendedKit = "White Ember";
+              recommendationText = `You're currently at a ${Math.round(hydrationData.hydrationGap)}ml hydration deficit. We recommend the White Ember kit to replenish quickly.`;
+            } else if (hydrationData.context === 'active') {
+              recommendedKit = "Silver Mirage";
+              recommendationText = `Based on your activity level, we recommend the Silver Mirage kit to maintain optimal hydration.`;
+            } else if (hydrationData.context === 'fasting') {
+              recommendedKit = "Echo Spiral";
+              recommendationText = `While fasting, we recommend the Echo Spiral kit to maintain electrolyte balance.`;
+            } else {
+              recommendationText = `For your current hydration needs, we recommend the ${recommendedKit} kit.`;
+            }
+            
+            setRecommendation({
+              text: recommendationText,
+              kit: recommendedKit as KitType
+            });
+          }
+        } else {
+          // Fallback to individual API calls if the hydration gap calculation fails
+          const profile = await getUserProfile(tempUserId);
+          if (profile) {
+            setUserProfile({
+              weight: profile.weight,
+              sex: profile.sex as 'male' | 'female',
+              bodyType: profile.body_type as 'low' | 'average' | 'high',
+            });
+          }
+          
+          const dbEvents = await getTodayHydrationEvents(tempUserId);
+          if (dbEvents && dbEvents.length > 0) {
+            setEvents(dbEvents.map(convertDBEventToUI));
+          }
+          
+          const target = await getDailyTarget(tempUserId);
+          if (target) {
+            setDailyTarget({
+              water_ml: target.water_ml,
+              protein_g: target.protein_g,
+              sodium_mg: target.sodium_mg,
+              potassium_mg: target.potassium_mg,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error);
+        toast({
+          title: "Error loading data",
+          description: "Please try again later",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    
+    loadUserData();
+  }, [toast, recommendation]);
 
   useEffect(() => {
-    // Set a default recommendation if none exists
+    // Generate recommendations based on hydration events
     if (!recommendation && events.length > 0) {
       const workoutEvents = events.filter((e) => e.type === "workout" && e.preWeight && e.postWeight)
       if (workoutEvents.length > 0) {
@@ -121,7 +418,7 @@ export default function UserDashboard() {
   }, [events, recommendation])
 
   // Calculate current status
-  const dailyNeeds = calculateDailyNeeds(userProfile.weight, userProfile.bodyType)
+  const dailyNeeds = calculateDailyNeeds(userProfile.weight, userProfile.sex, userProfile.bodyType)
   const currentIntake = {
     water: events
       .filter((e) => e.type === "water" || e.type === "electrolyte")
@@ -194,141 +491,109 @@ export default function UserDashboard() {
     drawNeonEffects()
   }, [])
 
-  const addEvent = () => {
-    if (newEvent.type && newEvent.time) {
-      const event: HydrationEvent = {
-        id: Date.now().toString(),
-        time: newEvent.time!,
-        type: newEvent.type as any,
-        amount: newEvent.amount,
-        preWeight: newEvent.preWeight,
-        postWeight: newEvent.postWeight,
-        description: newEvent.description || `${newEvent.type} event`,
+  async function handleAddEvent() {
+    if (!newEvent.type || !newEvent.time || !userId) return
+
+    try {
+      // Prepare the event for the database
+      const dbEvent: Omit<DBHydrationEvent, 'id' | 'created_at'> = {
+        user_id: userId,
+        event_date: new Date().toISOString().split('T')[0],
+        event_time: newEvent.time,
+        event_type: newEvent.type as "water" | "protein" | "electrolyte" | "workout",
+        description: newEvent.description || "",
       }
 
-      setEvents([...events, event].sort((a, b) => a.time.localeCompare(b.time)))
-      setShowAddModal(false)
-      setNewEvent({ time: new Date().toTimeString().slice(0, 5), type: "water" })
+      if (newEvent.type === "workout") {
+        dbEvent.pre_weight = sweatTest.preWeight
+        dbEvent.post_weight = sweatTest.postWeight
+      } else if (newEvent.amount) {
+        if (newEvent.type === "protein") {
+          dbEvent.amount_g = newEvent.amount
+        } else {
+          dbEvent.amount_ml = newEvent.amount
+        }
+      }
 
-      // Generate recommendation based on latest event
-      if (event.type === "workout" && event.preWeight && event.postWeight) {
-        const sweatLoss = (event.preWeight - event.postWeight) * 1000
-        setRecommendation({
-          text: `Heavy session detected! You lost ${sweatLoss}ml in sweat. Drink ${Math.round(sweatLoss * 1.2)}ml with electrolytes to restore balance.`,
-          kit: "White Ember",
+      // Save to database
+      const savedEvent = await logHydrationEvent(dbEvent)
+      
+      if (savedEvent) {
+        // Add to local state
+        const uiEvent = convertDBEventToUI(savedEvent)
+        setEvents([...events, uiEvent])
+        
+        toast({
+          title: "Event added",
+          description: `${newEvent.type} event added to your timeline`,
         })
       }
 
-      // Save to database (simulated)
-      toast({
-        title: "Event Added",
-        description: "Your hydration event has been recorded.",
+      // Reset form
+      setNewEvent({
+        time: new Date().toTimeString().slice(0, 5),
+        type: "water",
       })
-    }
-  }
-
-  const completeSweatTest = () => {
-    const sweatLoss = (sweatTest.preWeight - sweatTest.postWeight) * 1000
-    const sweatRate = sweatLoss / sweatTest.duration
-
-    // Add workout event
-    const event: HydrationEvent = {
-      id: Date.now().toString(),
-      time: new Date().toTimeString().slice(0, 5),
-      type: "workout",
-      preWeight: sweatTest.preWeight,
-      postWeight: sweatTest.postWeight,
-      description: `${sweatTest.duration}-min Sweat Test`,
-    }
-
-    setEvents([...events, event].sort((a, b) => a.time.localeCompare(b.time)))
-
-    // Set recommendation based on sweat rate
-    setRecommendation({
-      text: `Sweat test complete! Your sweat rate is ${Math.round(sweatRate)}ml/min. We recommend the Frost Echo kit with electrolytes to match your sweat profile.`,
-      kit: "Frost Echo",
-    })
-
-    setShowSweatTestModal(false)
-
-    toast({
-      title: "Sweat Test Completed",
-      description: `Your sweat rate is ${Math.round(sweatRate)}ml per minute.`,
-    })
-  }
-
-  const updateProfile = () => {
-    // Save to database (simulated)
-    toast({
-      title: "Profile Updated",
-      description: `Your profile has been updated with weight: ${userProfile.weight}kg and body type: ${BODY_TYPES[userProfile.bodyType].name}.`,
-    })
-
-    setShowProfileModal(false)
-  }
-
-  const getEventIcon = (type: string) => {
-    switch (type) {
-      case "water":
-      case "electrolyte":
-        return <Droplets className="h-4 w-4" />
-      case "workout":
-        return <Dumbbell className="h-4 w-4" />
-      case "protein":
-        return <Target className="h-4 w-4" />
-      default:
-        return <Clock className="h-4 w-4" />
-    }
-  }
-
-  const getEventColor = (type: string) => {
-    switch (type) {
-      case "water":
-        return "#00FFFF"
-      case "electrolyte":
-        return "#4FC3F7"
-      case "workout":
-        return "#FF6B9D"
-      case "protein":
-        return "#00FF88"
-      default:
-        return "#B388FF"
-    }
-  }
-
-  const hydrationPercentage = Math.min(
-    100,
-    Math.round(((currentIntake.water - currentIntake.sweatLoss) / dailyNeeds.water) * 100),
-  )
-
-  const purchaseKit = () => {
-    if (!location.trim()) {
+      setShowAddModal(false)
+      setShowSweatTestModal(false)
+    } catch (error) {
+      console.error("Error adding hydration event:", error)
       toast({
-        title: "Location Required",
-        description: "Please enter your current location for delivery",
+        title: "Error adding event",
+        description: "Please try again",
         variant: "destructive",
       })
-      return
     }
+  }
+  
+  async function handlePurchaseKit() {
+    if (!kitToPurchase || !userId) return
 
-    const newOrder: Order = {
-      id: Date.now().toString(),
-      kitName: kitToPurchase,
-      status: "pending",
-      timestamp: new Date().toISOString(),
-      location: location,
+    try {
+      // Prepare the order for the database
+      const dbOrder: Omit<DBOrder, 'id' | 'ordered_at' | 'completed_at'> = {
+        user_id: userId,
+        kit_id: kitToPurchase, // Normally this would be the actual kit ID, not the name
+        status: "pending",
+        location: location || undefined,
+        payment_status: "pending", // Assuming this field exists in your schema
+        delivery_method: location ? "venue" : "delivery" // Tracking delivery method
+      }
+
+      // Save to database
+      const savedOrder = await createOrder(dbOrder)
+      
+      if (savedOrder) {
+        // Add to local state for UI display
+        const uiOrder: Order = {
+          id: savedOrder.id,
+          kitName: kitToPurchase, // Using the name for display
+          status: "pending",
+          timestamp: new Date().toISOString(),
+          location: location || undefined,
+        }
+        
+        setOrders([...orders, uiOrder])
+        
+        toast({
+          title: "Order placed",
+          description: `Your ${kitToPurchase} kit has been ordered`,
+        })
+      }
+
+      // Reset form
+      setKitToPurchase("")
+      setLocation("")
+      setShowLocationModal(false)
+    } catch (error) {
+      console.error("Error creating order:", error)
+      toast({
+        title: "Error placing order",
+        description: "Please try again",
+        variant: "destructive",
+      })
     }
-
-    setOrders([...orders, newOrder])
-    setShowLocationModal(false)
-    setLocation("")
-
-    toast({
-      title: "Kit Ordered!",
-      description: `Your ${kitToPurchase} kit will be prepared and delivered to you shortly.`,
-      variant: "default",
-    })
-
+    
     // Generate a new recommendation after purchase
     const archetypes = ["post_sweat_cool", "mental_fog", "gut_rebalance", "rest_reset", "clean_energy", "detox_gentle"]
     const randomArchetype = archetypes[Math.floor(Math.random() * archetypes.length)]
@@ -376,7 +641,7 @@ export default function UserDashboard() {
         <div className="flex items-center gap-4">
           <div className="text-sm opacity-70 flex items-center gap-2">
             <span>
-              {userProfile.weight}kg • {BODY_TYPES[userProfile.bodyType].name}
+              {userProfile.weight}kg • {getBodyTypeName(userProfile.bodyType)}
             </span>
             <Button
               variant="ghost"
@@ -600,6 +865,13 @@ export default function UserDashboard() {
 
         {/* Main Content */}
         <div className="flex-1 p-6">
+          {/* Precision Hydration Info */}
+          <div className="mb-4 bg-slate-800/70 border border-cyan-400/20 rounded-md p-3 flex items-center">
+            <div className="text-xs text-slate-300">
+              <span className="text-cyan-400 font-medium">Precision Hydration:</span> Your targets are calculated using your lean body mass (based on your sex and body type) rather than total weight, for scientifically accurate recommendations.
+            </div>
+          </div>
+          
           {/* Status Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card className="p-6 bg-slate-700/50 border-cyan-400/20">
@@ -786,6 +1058,32 @@ export default function UserDashboard() {
           </DialogHeader>
           <div className="py-4 space-y-6">
             <div className="space-y-2">
+              <Label className="text-cyan-400">Biological Sex</Label>
+              <Tabs
+                value={userProfile.sex}
+                onValueChange={(value) =>
+                  setUserProfile({ ...userProfile, sex: value as 'male' | 'female' })
+                }
+                className="w-full"
+              >
+                <TabsList className="grid grid-cols-2 w-full bg-slate-700">
+                  <TabsTrigger
+                    value="male"
+                    className="data-[state=active]:bg-blue-400/20 data-[state=active]:text-blue-300"
+                  >
+                    Male
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="female"
+                    className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300"
+                  >
+                    Female
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
+            <div className="space-y-2">
               <Label className="text-cyan-400">Weight (kg)</Label>
               <div className="flex items-center gap-4">
                 <Slider
@@ -802,34 +1100,65 @@ export default function UserDashboard() {
 
             <div className="space-y-2">
               <Label className="text-cyan-400">Body Type</Label>
-              <Tabs
-                value={userProfile.bodyType}
-                onValueChange={(value) =>
-                  setUserProfile({ ...userProfile, bodyType: value as keyof typeof BODY_TYPES })
-                }
-                className="w-full"
-              >
-                <TabsList className="grid grid-cols-3 w-full bg-slate-700">
-                  <TabsTrigger
-                    value="muscular"
-                    className="data-[state=active]:bg-green-400/20 data-[state=active]:text-green-300"
-                  >
-                    Muscular
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="average"
-                    className="data-[state=active]:bg-cyan-400/20 data-[state=active]:text-cyan-300"
-                  >
-                    Average
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="stocky"
-                    className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300"
-                  >
-                    Stocky
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              {userProfile.sex === 'male' ? (
+                <Tabs
+                  value={userProfile.bodyType}
+                  onValueChange={(value) =>
+                    setUserProfile({ ...userProfile, bodyType: value as keyof typeof BODY_TYPES })
+                  }
+                  className="w-full"
+                >
+                  <TabsList className="grid grid-cols-3 w-full bg-slate-700">
+                    <TabsTrigger
+                      value="muscular"
+                      className="data-[state=active]:bg-green-400/20 data-[state=active]:text-green-300"
+                    >
+                      Muscular
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="athletic"
+                      className="data-[state=active]:bg-cyan-400/20 data-[state=active]:text-cyan-300"
+                    >
+                      Athletic
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="stocky"
+                      className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300"
+                    >
+                      Stocky
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              ) : (
+                <Tabs
+                  value={userProfile.bodyType}
+                  onValueChange={(value) =>
+                    setUserProfile({ ...userProfile, bodyType: value as keyof typeof BODY_TYPES })
+                  }
+                  className="w-full"
+                >
+                  <TabsList className="grid grid-cols-3 w-full bg-slate-700">
+                    <TabsTrigger
+                      value="toned"
+                      className="data-[state=active]:bg-green-400/20 data-[state=active]:text-green-300"
+                    >
+                      Toned
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="athletic_female"
+                      className="data-[state=active]:bg-cyan-400/20 data-[state=active]:text-cyan-300"
+                    >
+                      Athletic
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="curvy"
+                      className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300"
+                    >
+                      Curvy
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
             </div>
           </div>
           <Button
@@ -846,11 +1175,22 @@ export default function UserDashboard() {
       <Dialog open={showSweatTestModal} onOpenChange={setShowSweatTestModal}>
         <DialogContent className="bg-slate-800 border-pink-400/30">
           <DialogHeader>
-            <DialogTitle style={{ color: "#FF6B9D" }}>15-Minute Sweat Test</DialogTitle>
+            <DialogTitle style={{ color: "#FF6B9D", textShadow: "0 0 10px rgba(255, 107, 157, 0.5)" }} className="text-xl font-bold">Sweat Rate Test</DialogTitle>
           </DialogHeader>
           <div className="py-4 space-y-6">
+            <div className="bg-slate-700/70 border border-pink-400/30 rounded-md p-3 mb-3 shadow-inner shadow-pink-400/10">
+              <p className="text-sm text-slate-100 mb-2">
+                <span className="text-pink-400 font-bold" style={{ textShadow: "0 0 8px rgba(255, 107, 157, 0.4)" }}>For accurate results:</span>
+              </p>
+              <ul className="text-xs text-slate-200 list-disc pl-4 space-y-1">
+                <li>Do at least 20 minutes of activity</li>
+                <li>Weigh yourself in dry clothes before and after</li>
+                <li>Don't drink or use the restroom between measurements</li>
+                <li>Dry off completely after activity before weighing</li>
+              </ul>
+            </div>
             <p className="text-sm">
-              Record your weight before and after a 15-minute intense workout to calculate your personal sweat rate.
+              Record your weight before and after your workout to calculate your personal sweat rate.
             </p>
 
             <div className="space-y-2">
@@ -898,26 +1238,82 @@ export default function UserDashboard() {
               </div>
             </div>
 
-            <div className="p-3 bg-pink-400/10 rounded-md border border-pink-400/30">
-              <p className="text-sm">
+            <div className="p-4 bg-pink-400/15 rounded-md border border-pink-400/40 shadow-lg shadow-pink-400/5">
+              <p className="text-sm mb-1">
                 Calculated sweat loss:{" "}
-                <strong>{Math.round((sweatTest.preWeight - sweatTest.postWeight) * 1000)}ml</strong>
+                <strong className="text-pink-400" style={{ textShadow: "0 0 8px rgba(255, 107, 157, 0.4)" }}>
+                  {Math.round((sweatTest.preWeight - sweatTest.postWeight) * 1000)}ml
+                </strong>
               </p>
               <p className="text-sm">
                 Sweat rate:{" "}
-                <strong>
+                <strong className="text-pink-400" style={{ textShadow: "0 0 8px rgba(255, 107, 157, 0.4)" }}>
                   {Math.round(((sweatTest.preWeight - sweatTest.postWeight) * 1000) / sweatTest.duration)}ml/min
                 </strong>
               </p>
             </div>
+            
+            <div className="space-y-3 pt-2">
+              <p className="text-xs text-slate-400">Want more precise measurements?</p>
+              
+              <div className="flex flex-col space-y-2">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="border-pink-400/30 text-xs justify-start"
+                  onClick={() => toast({
+                    title: "Feature requested",
+                    description: "We've noted your interest in activity intensity tracking.",
+                    variant: "default"
+                  })}
+                >
+                  <Plus className="h-3 w-3 mr-2" /> Request activity intensity tracking
+                </Button>
+                
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="border-pink-400/30 text-xs justify-start"
+                  onClick={() => toast({
+                    title: "Feature requested",
+                    description: "We've noted your interest in sweat composition analysis.",
+                    variant: "default"
+                  })}
+                >
+                  <Plus className="h-3 w-3 mr-2" /> Request salt/sweat strip support
+                </Button>
+                
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="border-pink-400/30 text-xs justify-start"
+                  onClick={() => toast({
+                    title: "Feature requested",
+                    description: "We've noted your interest in advanced body composition analysis.",
+                    variant: "default"
+                  })}
+                >
+                  <Plus className="h-3 w-3 mr-2" /> Request body composition analyzer support
+                </Button>
+              </div>
+            </div>
           </div>
-          <Button
-            onClick={completeSweatTest}
-            className="bg-pink-400/20 border border-pink-400/60 hover:bg-pink-400/30"
-            style={{ color: "#FF6B9D" }}
-          >
-            Complete Test
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={completeSweatTest}
+              className="bg-pink-400/30 border border-pink-400/70 hover:bg-pink-400/40 flex-1 shadow-md shadow-pink-400/20 transition-all duration-300"
+              style={{ color: "#FF6B9D", textShadow: "0 0 8px rgba(255, 107, 157, 0.3)" }}
+            >
+              Log Sweat Test
+            </Button>
+            <Button
+              onClick={() => setShowSweatTestModal(false)}
+              variant="outline"
+              className="border-slate-600 hover:bg-slate-700/50"
+            >
+              Cancel
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

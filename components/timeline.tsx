@@ -10,40 +10,93 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { getHydrationKit } from "@/lib/hydration-engine"
 
-// Simple types for timeline events
+// Timeline event types aligned with hydration calculations
 interface TimelineEvent {
   id: string
-  time: string
-  activity: string
+  date: string // Full date (YYYY-MM-DD)
+  time: string // Time (HH:MM)
+  type: "water" | "food" | "exercise" | "electrolyte" // Aligns with our 4 key components
   description: string
-  hydrationGap: boolean
+  // Type-specific properties
+  water_amount_ml?: number // For water events
+  food_type?: string // For food events
+  food_water_content?: number // Water content in food (ml)
+  activity_type?: string // For exercise events
+  intensity?: "light" | "moderate" | "intense" // For exercise events
+  duration?: number // Duration in minutes for exercise
+  electrolyte_type?: string // For electrolyte intake events
+  sodium_mg?: number // Sodium content (mg)
+  potassium_mg?: number // Potassium content (mg)
+  magnesium_mg?: number // Magnesium content (mg)
+  // UI properties
   icon: "water" | "coffee" | "food" | "exercise"
 }
 
-// Mock data for timeline events
+// Mock data for timeline events (one week of data)
 const mockEvents: TimelineEvent[] = [
+  // Today's events
   {
     id: "1",
+    date: new Date().toISOString().split('T')[0],
     time: "07:30",
-    activity: "hot_yoga",
+    type: "exercise",
+    activity_type: "hot_yoga",
     description: "Hot yoga session",
-    hydrationGap: true,
+    duration: 45,
+    intensity: "moderate",
     icon: "exercise",
   },
   {
     id: "2",
-    time: "12:00",
-    activity: "desk",
-    description: "Working at desk",
-    hydrationGap: false,
-    icon: "coffee",
+    date: new Date().toISOString().split('T')[0],
+    time: "09:15",
+    type: "water",
+    water_amount_ml: 500,
+    description: "Morning hydration",
+    icon: "water",
   },
   {
     id: "3",
+    date: new Date().toISOString().split('T')[0],
+    time: "12:30",
+    type: "food",
+    food_type: "lunch",
+    food_water_content: 250,
+    description: "Lunch (salad & protein)",
+    icon: "food",
+  },
+  {
+    id: "4",
+    date: new Date().toISOString().split('T')[0],
     time: "15:00",
-    activity: "run",
+    type: "exercise",
+    activity_type: "run",
+    duration: 30,
+    intensity: "intense",
     description: "Afternoon run",
-    hydrationGap: true,
+    icon: "exercise",
+  },
+  {
+    id: "5",
+    date: new Date().toISOString().split('T')[0],
+    time: "16:30",
+    type: "electrolyte",
+    electrolyte_type: "sports_drink",
+    sodium_mg: 200,
+    potassium_mg: 150,
+    description: "Post-workout electrolytes",
+    icon: "water",
+  },
+  // Yesterday's events (simple example)
+  {
+    id: "6",
+    date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+    time: "08:00",
+    type: "exercise",
+    activity_type: "gym",
+    duration: 60,
+    intensity: "moderate",
+    description: "Morning gym session",
     icon: "exercise",
   },
 ]
@@ -52,31 +105,82 @@ export default function Timeline({ user }) {
   const [events, setEvents] = useState<TimelineEvent[]>(mockEvents)
   const [showAddModal, setShowAddModal] = useState(false)
   const [newEvent, setNewEvent] = useState<Partial<TimelineEvent>>({
-    time: "12:00",
-    hydrationGap: false,
+    date: new Date().toISOString().split('T')[0],
+    time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    type: "water",
+    description: "",
     icon: "water",
+    water_amount_ml: 500,
   })
   const [recommendation, setRecommendation] = useState<string | null>(null)
 
+  // Function to add a new event to the timeline
   const addEvent = () => {
-    if (newEvent.activity && newEvent.time) {
+    if (newEvent.type && newEvent.time) {
+      // Create base event
       const event: TimelineEvent = {
         id: Date.now().toString(),
+        date: newEvent.date || new Date().toISOString().split('T')[0],
         time: newEvent.time,
-        activity: newEvent.activity,
-        description: newEvent.description || `${newEvent.activity} activity`,
-        hydrationGap: newEvent.hydrationGap || false,
+        type: newEvent.type as "water" | "food" | "exercise" | "electrolyte",
+        description: newEvent.description || `${newEvent.type} activity`,
         icon: newEvent.icon as "water" | "coffee" | "food" | "exercise",
+      }
+      
+      // Add type-specific properties
+      switch(event.type) {
+        case "water":
+          event.water_amount_ml = newEvent.water_amount_ml || 500;
+          break;
+        case "food":
+          event.food_type = newEvent.food_type || "meal";
+          event.food_water_content = newEvent.food_water_content || 200;
+          break;
+        case "exercise":
+          event.activity_type = newEvent.activity_type || "workout";
+          event.intensity = newEvent.intensity || "moderate";
+          event.duration = newEvent.duration || 30;
+          break;
+        case "electrolyte":
+          event.electrolyte_type = newEvent.electrolyte_type || "drink";
+          event.sodium_mg = newEvent.sodium_mg || 200;
+          event.potassium_mg = newEvent.potassium_mg || 150;
+          break;
       }
 
       const updatedEvents = [...events, event]
       setEvents(updatedEvents)
       setShowAddModal(false)
-
-      // Get recommendation based on latest event
-      const kit = getHydrationKit(event.activity, event.hydrationGap)
-      setRecommendation(kit)
+      
+      // Calculate hydration impact of this event
+      // This would ideally call a proper calculation function that uses our hydration-engine
+      calculateHydrationImpact(event);
     }
+  }
+  
+  // Calculate the hydration impact of an event
+  const calculateHydrationImpact = (event: TimelineEvent) => {
+    // In a real implementation, this would use the hydration-engine.ts functions
+    // to calculate water balance, electrolyte needs, etc.
+    
+    let message = "";
+    
+    switch(event.type) {
+      case "water":
+        message = `Added ${event.water_amount_ml}ml of hydration.`;
+        break;
+      case "exercise":
+        message = `You may need additional ${event.duration! * 10}ml of water to compensate for ${event.intensity} ${event.activity_type}.`;
+        break;
+      case "food":
+        message = `Your meal provided approximately ${event.food_water_content}ml of water.`;
+        break;
+      case "electrolyte":
+        message = `Replenished ${event.sodium_mg}mg sodium and ${event.potassium_mg}mg potassium.`;
+        break;
+    }
+    
+    setRecommendation(message);
   }
 
   const getIconComponent = (icon: string) => {
@@ -173,6 +277,43 @@ export default function Timeline({ user }) {
                   placeholder="Brief description"
                 />
               </div>
+              {/* Show intensity and duration only for exercise events */}
+              {newEvent.icon === "exercise" && (
+                <>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="intensity" className="text-right">
+                      Intensity
+                    </Label>
+                    <Select
+                      value={newEvent.intensity}
+                      onValueChange={(value) => setNewEvent({ ...newEvent, intensity: value as "light" | "moderate" | "intense" })}
+                    >
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Select intensity" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="light">Light</SelectItem>
+                        <SelectItem value="moderate">Moderate</SelectItem>
+                        <SelectItem value="intense">Intense</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="duration" className="text-right">
+                      Duration (min)
+                    </Label>
+                    <input
+                      id="duration"
+                      type="number"
+                      className="col-span-3 p-2 border rounded"
+                      value={newEvent.duration || 30}
+                      onChange={(e) => setNewEvent({ ...newEvent, duration: parseInt(e.target.value) || 30 })}
+                      min="5"
+                      max="240"
+                    />
+                  </div>
+                </>
+              )}
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="hydrationGap" className="text-right">
                   Hydration Gap
@@ -200,6 +341,21 @@ export default function Timeline({ user }) {
           <div key={event.id} className="relative">
             <div className="absolute -left-10 mt-1.5 h-6 w-6 rounded-full bg-white border-2 border-gray-200 flex items-center justify-center">
               {getIconComponent(event.icon)}
+            </div>
+            {/* Event meta */}
+            <div className="mt-1 flex justify-between">
+              <div className="text-xs text-gray-500">
+                {event.activity.replace("_", " ")}
+                {event.icon === "exercise" && event.intensity && (
+                  <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] bg-gray-100">
+                    {event.intensity}
+                  </span>
+                )}
+                {event.icon === "exercise" && event.duration && (
+                  <span className="ml-1 text-[10px]">{event.duration}min</span>
+                )}
+              </div>
+              <div className="text-xs text-gray-500">{event.time}</div>
             </div>
             <div className="mb-1 text-sm font-medium text-gray-500">{event.time}</div>
             <Card className="p-3">

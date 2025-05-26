@@ -1,28 +1,39 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
-import { User } from "lucide-react"
 import { useForm } from "react-hook-form"
-import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
-
+import { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { registerUser } from "@/lib/database-functions"
+import { registerUserClient } from "@/lib/client-auth"
+import { Eye, EyeOff } from "lucide-react"
+import { User } from "lucide-react"
+import { motion } from "framer-motion"
+import { getBodyTypeOptions } from "@/lib/hydration-engine"
 
 // Form validation schema
 const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   name: z.string().min(2, "Name must be at least 2 characters"),
+  nickname: z.string().min(2, "Display name must be at least 2 characters").optional(),
   weight: z.coerce.number().min(20, "Weight must be at least 20kg").max(250, "Weight must be less than 250kg"),
-  bodyType: z.enum(["muscular", "average", "stocky"], {
-    invalid_type_error: "Please select a body type",
+  sex: z.enum(["male", "female"], {
+    invalid_type_error: "Please select your biological sex",
+  }),
+  bodyType: z.string({
+    required_error: "Please select a body type",
+  }),
+  phoneNumber: z.string().optional(),
+  contactPreference: z.enum(["email", "whatsapp", "phone", "text"], {
+    invalid_type_error: "Please select a contact preference",
   }),
 })
 
@@ -32,6 +43,8 @@ export function RegisterForm() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const [bodyTypeOptions, setBodyTypeOptions] = useState<{value: string, label: string}[]>([])
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -39,23 +52,39 @@ export function RegisterForm() {
       email: "",
       password: "",
       name: "",
+      nickname: "",
       weight: undefined,
+      sex: "male",
       bodyType: undefined,
+      phoneNumber: "",
+      contactPreference: "email",
     },
   })
+  
+  // Update body type options when sex changes
+  useEffect(() => {
+    const sex = form.watch("sex") as 'male' | 'female'
+    setBodyTypeOptions(getBodyTypeOptions(sex))
+    // Reset body type when sex changes
+    form.setValue("bodyType", undefined)
+  }, [form.watch("sex")])
 
   async function onSubmit(data: RegisterFormValues) {
     setIsLoading(true)
     setError(null)
     
     try {
-      // Register user with Supabase
-      const { user, error } = await registerUser(
+      // Register user with Supabase using client-safe function
+      const { user, error } = await registerUserClient(
         data.email, 
         data.password, 
         data.name, 
+        data.nickname || "", // Include the nickname
         data.weight, 
-        data.bodyType
+        data.sex,
+        data.bodyType,
+        data.phoneNumber || "",
+        data.contactPreference
       )
 
       if (error) {
@@ -106,13 +135,29 @@ export function RegisterForm() {
             
             <div className="space-y-2">
               <Label htmlFor="password" className="text-slate-200">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                className="bg-slate-700/70 border-slate-600 text-slate-100"
-                placeholder="••••••••"
-                {...form.register("password")}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  className="bg-slate-700/70 border-slate-600 text-slate-100 pr-10"
+                  placeholder="••••••••"
+                  {...form.register("password")}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 text-slate-400 hover:text-slate-200"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                  <span className="sr-only">{showPassword ? "Hide password" : "Show password"}</span>
+                </Button>
+              </div>
               {form.formState.errors.password && (
                 <p className="text-red-400 text-sm">{form.formState.errors.password.message}</p>
               )}
@@ -124,11 +169,25 @@ export function RegisterForm() {
                 id="name"
                 type="text"
                 className="bg-slate-700/70 border-slate-600 text-slate-100"
-                placeholder="Your name"
+                placeholder="John Doe"
                 {...form.register("name")}
               />
               {form.formState.errors.name && (
                 <p className="text-red-400 text-sm">{form.formState.errors.name.message}</p>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="nickname" className="text-slate-200">Display Name (what you'd like to be known as)</Label>
+              <Input
+                id="nickname"
+                type="text"
+                className="bg-slate-700/70 border-slate-600 text-slate-100"
+                placeholder="HydrationChamp"
+                {...form.register("nickname")}
+              />
+              {form.formState.errors.nickname && (
+                <p className="text-red-400 text-sm">{form.formState.errors.nickname.message}</p>
               )}
             </div>
             
@@ -146,30 +205,92 @@ export function RegisterForm() {
               )}
             </div>
             
-            <div className="space-y-3">
-              <Label className="text-slate-200">Body Type</Label>
-              <RadioGroup 
-                className="flex space-x-2"
-                onValueChange={(value) => form.setValue("bodyType", value as "muscular" | "average" | "stocky")}
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="muscular" id="muscular" className="border-cyan-500" />
-                  <Label htmlFor="muscular" className="text-slate-200">Muscular</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pb-4">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-200">Biological Sex</Label>
+                  <span className="text-xs text-cyan-400 opacity-80">Used for precise body composition analysis</span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="average" id="average" className="border-cyan-500" />
-                  <Label htmlFor="average" className="text-slate-200">Average</Label>
+                <RadioGroup
+                  defaultValue="male"
+                  onValueChange={(value) => form.setValue("sex", value as "male" | "female")}
+                  className="flex flex-col space-y-1"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="male" id="male" className="border-cyan-500" />
+                    <Label htmlFor="male" className="text-sm">Male</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="female" id="female" className="border-cyan-500" />
+                    <Label htmlFor="female" className="text-sm">Female</Label>
+                  </div>
+                </RadioGroup>
+                {form.formState.errors.sex && (
+                  <p className="text-xs text-red-500">{form.formState.errors.sex.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-200">Body Type</Label>
+                  <span className="text-xs text-cyan-400 opacity-80">Determines your lean body mass calculation</span>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="stocky" id="stocky" className="border-cyan-500" />
-                  <Label htmlFor="stocky" className="text-slate-200">Stocky</Label>
-                </div>
-              </RadioGroup>
-              {form.formState.errors.bodyType && (
-                <p className="text-red-400 text-sm">{form.formState.errors.bodyType.message}</p>
-              )}
+                <RadioGroup
+                  onValueChange={(value) => form.setValue("bodyType", value)}
+                  className="flex flex-col space-y-1"
+                >
+                  {bodyTypeOptions.map((option) => (
+                    <div key={option.value} className="flex items-center space-x-2">
+                      <RadioGroupItem value={option.value} id={option.value} className="border-cyan-500" />
+                      <Label htmlFor={option.value} className="text-sm">{option.label}</Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+                {form.formState.errors.bodyType && (
+                  <p className="text-xs text-red-500">{form.formState.errors.bodyType.message}</p>
+                )}
+              </div>
             </div>
             
+            <div className="space-y-2">
+              <Label htmlFor="phoneNumber" className="text-slate-200">Phone Number (Optional)</Label>
+              <Input
+                id="phoneNumber"
+                type="tel"
+                className="bg-slate-700/70 border-slate-600 text-slate-100"
+                placeholder="+971 XX XXX XXXX"
+                {...form.register("phoneNumber")}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-slate-200">Preferred Contact Method</Label>
+              <RadioGroup
+                onValueChange={(value) => form.setValue("contactPreference", value as "email" | "whatsapp" | "phone" | "text")}
+                defaultValue="email"
+                className="flex flex-col space-y-1"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="email" id="email-contact" className="border-cyan-500" />
+                  <Label htmlFor="email-contact" className="text-sm">Email</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="whatsapp" id="whatsapp" className="border-cyan-500" />
+                  <Label htmlFor="whatsapp" className="text-sm">WhatsApp</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="phone" id="phone" className="border-cyan-500" />
+                  <Label htmlFor="phone" className="text-sm">Phone Call</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="text" id="text" className="border-cyan-500" />
+                  <Label htmlFor="text" className="text-sm">Text Message</Label>
+                </div>
+              </RadioGroup>
+              {form.formState.errors.contactPreference && (
+                <p className="text-xs text-red-500">{form.formState.errors.contactPreference.message}</p>
+              )}
+            </div>
             {error && (
               <div className="bg-red-900/20 border border-red-500/50 text-red-300 rounded-md p-3 text-sm">
                 {error}

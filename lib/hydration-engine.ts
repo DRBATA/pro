@@ -37,6 +37,37 @@ export type KitType =
   | "Morning Flow"
   | "Ghost Bloom"
 
+// Body fat percentages by sex and body type
+export const BODY_FAT_PERCENTAGES = {
+  male: {
+    muscular: 0.10,  // 10% for muscular men
+    average: 0.22,   // 22% for average men
+    stocky: 0.34,    // 34% for stocky men
+  },
+  female: {
+    toned: 0.18,     // 18% for toned women
+    average: 0.28,   // 28% for average women
+    curvy: 0.40,     // 40% for curvy women
+  }
+}
+
+// Get appropriate body type options based on sex
+export function getBodyTypeOptions(sex: 'male' | 'female') {
+  if (sex === 'male') {
+    return [
+      { value: 'muscular', label: 'Muscular' },
+      { value: 'average', label: 'Average' },
+      { value: 'stocky', label: 'Stocky' }
+    ];
+  } else {
+    return [
+      { value: 'toned', label: 'Toned' },
+      { value: 'average', label: 'Average' },
+      { value: 'curvy', label: 'Curvy' }
+    ];
+  }
+}
+
 export interface HydrationParams {
   activity: ActivityType
   time: string
@@ -76,11 +107,185 @@ export const archetypeToKits: Record<HydrationArchetype, KitType[]> = {
   detox_gentle: ["Ghost Bloom", "White Ember"],
 }
 
+// Activity intensity levels for water loss calculations
+export type ActivityIntensity = 'light' | 'moderate' | 'intense';
+
+// Activity context for nutritional requirements
+export type ActivityContext = 'baseline' | 'active' | 'fasting' | 'high_sweat';
+
+// Base water loss rates by activity (ml per minute)
+export const ACTIVITY_WATER_LOSS: Record<string, number> = {
+  // Sedentary activities (mostly baseline losses)
+  desk: 0.5,
+  work_laptop: 0.5,
+  zoom: 0.6,  // Slightly higher due to talking
+  sleep: 0.4,
+  rest_day: 0.5,
+  meditation: 0.5,
+  late_screen: 0.5,
+  
+  // Light activities
+  brunch: 0.7,  // Digestive activity increases water loss
+  big_meal: 0.8,
+  cycle: 2.0,   // Light cycling
+  
+  // Moderate to intense activities
+  run: 8.0,     // Base rate for running
+  hiit: 12.0,   // Base rate for HIIT
+  hot_yoga: 10.0 // Base rate for hot yoga
+};
+
+// Intensity multipliers for activities that can vary in intensity
+export const INTENSITY_MULTIPLIERS = {
+  light: 0.7,      // 70% of base rate
+  moderate: 1.0,   // Base rate
+  intense: 1.5     // 150% of base rate
+};
+
+// Fluid content percentages for common food types
+export const FOOD_WATER_CONTENT: Record<string, number> = {
+  fruits: 0.85,      // 85% water content
+  vegetables: 0.90,  // 90% water content
+  soup: 0.92,        // 92% water content
+  yogurt: 0.85,      // 85% water content
+  rice: 0.70,        // 70% water content
+  pasta: 0.65,       // 65% water content
+  bread: 0.35,       // 35% water content
+  meat: 0.60,        // 60% water content
+  fish: 0.70,        // 70% water content
+  eggs: 0.75         // 75% water content
+};
+
+/**
+ * Calculate hydration gap based on user's body composition, activity, and intake
+ * 
+ * @param weight User's weight in kg
+ * @param sex User's biological sex ('male' or 'female')
+ * @param bodyType User's body type
+ * @param activity Type of activity
+ * @param activityDuration Duration of activity in minutes
+ * @param activityIntensity Intensity of the activity
+ * @param waterIntake Water consumed in ml
+ * @param foodIntake Array of food items consumed with amounts in grams
+ * @returns Hydration gap in ml (positive means deficit, negative means excess)
+ */
+export function calculateHydrationGap(
+  weight: number,
+  sex: 'male' | 'female',
+  bodyType: string,
+  activity: string,
+  activityDuration: number,
+  activityIntensity: ActivityIntensity = 'moderate',
+  waterIntake: number,
+  foodIntake: Array<{food: string, amount: number}> = []
+): {
+  hydrationGap: number,
+  context: ActivityContext,
+  leanBodyMass: number,
+  waterLoss: number,
+  waterFromFood: number,
+  totalWaterInput: number,
+  recommendedIntake: number
+} {
+  // 1. Calculate lean body mass based on sex and body type
+  let bodyFatPercentage: number;
+  
+  // Safe type checking for body type lookup
+  if (sex === 'male') {
+    // For male body types
+    if (bodyType === 'muscular' || bodyType === 'average' || bodyType === 'stocky') {
+      bodyFatPercentage = BODY_FAT_PERCENTAGES.male[bodyType];
+    } else {
+      bodyFatPercentage = BODY_FAT_PERCENTAGES.male.average; // Default
+    }
+  } else {
+    // For female body types
+    if (bodyType === 'toned' || bodyType === 'average' || bodyType === 'curvy') {
+      bodyFatPercentage = BODY_FAT_PERCENTAGES.female[bodyType];
+    } else {
+      bodyFatPercentage = BODY_FAT_PERCENTAGES.female.average; // Default
+    }
+  }
+  
+  const leanBodyMass = weight * (1 - bodyFatPercentage);
+  
+  // 2. Determine activity context
+  let context: ActivityContext = 'baseline';
+  if (['hiit', 'hot_yoga', 'run'].includes(activity)) {
+    context = activityIntensity === 'intense' ? 'high_sweat' : 'active';
+  } else if (activity === 'fasting') {
+    context = 'fasting';
+  }
+  
+  // 3. Calculate water loss based on activity, duration, and intensity
+  const baseWaterLossRate = activity in ACTIVITY_WATER_LOSS ? ACTIVITY_WATER_LOSS[activity] : 0.5; // Default to desk rate if not found
+  const intensityMultiplier = INTENSITY_MULTIPLIERS[activityIntensity];
+  const waterLoss = baseWaterLossRate * activityDuration * intensityMultiplier;
+  
+  // 4. Calculate water from food
+  let waterFromFood = 0;
+  foodIntake.forEach(item => {
+    const waterContent = item.food in FOOD_WATER_CONTENT ? FOOD_WATER_CONTENT[item.food] : 0.5; // Default to 50% if not found
+    waterFromFood += item.amount * waterContent;
+  });
+  
+  // 5. Calculate total water input
+  const totalWaterInput = waterIntake + waterFromFood;
+  
+  // 6. Calculate recommended intake based on context and lean body mass
+  let recommendedMlPerKgLBM = 30; // Baseline
+  
+  switch (context) {
+    case 'active':
+      recommendedMlPerKgLBM = 45; // Average of 40-50ml/kg LBM for active
+      break;
+    case 'fasting':
+      recommendedMlPerKgLBM = 45; // Average of 40-50ml/kg LBM for fasting
+      break;
+    case 'high_sweat':
+      recommendedMlPerKgLBM = 55; // Above 50ml/kg LBM for high sweat
+      break;
+    default: // baseline
+      recommendedMlPerKgLBM = 30;
+  }
+  
+  const recommendedIntake = recommendedMlPerKgLBM * leanBodyMass;
+  
+  // 7. Calculate hydration gap (positive means deficit)
+  const hydrationGap = waterLoss - totalWaterInput;
+  
+  return {
+    hydrationGap,
+    context,
+    leanBodyMass,
+    waterLoss,
+    waterFromFood,
+    totalWaterInput,
+    recommendedIntake
+  };
+}
+
 // Get a kit recommendation based on activity and hydration gap
 export function getHydrationKit(activity: string, hydrationGap: boolean): string {
   const archetype = getHydrationArchetype(activity, hydrationGap)
-  const kits = archetypeToKits[archetype] || []
-  return kits.length > 0 ? kits[0] : "Sky Salt" // Default to Sky Salt if no match
+
+  // Return a specific kit based on the archetype
+  switch (archetype) {
+    case "post_sweat_cool":
+      return "White Ember"
+    case "mental_fog":
+      return "Silver Mirage"
+    case "gut_rebalance":
+      return "Echo Spiral"
+    case "rest_reset":
+      return "Night Signal"
+    case "clean_energy":
+      return "Sky Salt"
+    case "detox_gentle":
+      return "Ghost Bloom"
+    default:
+      return "Sky Salt" // Default recommendation
+  }
 }
 
 export const kitDescriptions: Record<KitType, string> = {

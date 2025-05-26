@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { loginUser } from "@/lib/database-functions"
+import { loginUserClient } from "@/lib/client-auth"
 
 // Form validation schema
 const loginSchema = z.object({
@@ -44,8 +44,8 @@ export function LoginForm() {
     setError(null)
     
     try {
-      // Login user with Supabase
-      const { user, isStaff, error } = await loginUser(data.email, data.password)
+      // Login user with Supabase using client-safe function
+      const { user, isStaff, error } = await loginUserClient(data.email, data.password)
 
       if (error) {
         setError(error)

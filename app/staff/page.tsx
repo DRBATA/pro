@@ -2,16 +2,18 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { Users, Clock, MapPin, Search, User } from "lucide-react"
+import { Users, Clock, MapPin, Search, User, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { toast } from "@/components/ui/use-toast"
+import { useToast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
+import { getOrders, getHydrationKits, updateOrderStatus } from "@/lib/database-functions"
+import { Order as DBOrder, HydrationKit as DBKit } from "@/lib/types/database.types"
 
-// Order type
+// Frontend Order type for UI state management
 interface Order {
   id: string
   userId: string
@@ -22,7 +24,7 @@ interface Order {
   location: string
 }
 
-// Kit type
+// Frontend Kit type for UI state management
 interface Kit {
   id: string
   name: string
@@ -31,70 +33,95 @@ interface Kit {
   ingredients: string[]
 }
 
+// Convert database order to frontend format
+function convertDBOrderToUI(dbOrder: DBOrder): Order {
+  return {
+    id: dbOrder.id,
+    userId: dbOrder.user_id,
+    userName: "Customer", // We would normally fetch this from the user table
+    kitName: dbOrder.kit_id, // This would be the kit name, not ID in a real app
+    status: dbOrder.status as "pending" | "in-progress" | "completed",
+    timestamp: dbOrder.ordered_at || new Date().toISOString(),
+    location: dbOrder.location || "Not specified",
+  }
+}
+
+// Convert database kit to frontend format
+function convertDBKitToUI(dbKit: DBKit): Kit {
+  return {
+    id: dbKit.id,
+    name: dbKit.name,
+    description: dbKit.description || "",
+    archetype: dbKit.archetype,
+    ingredients: dbKit.ingredients ? Object.keys(dbKit.ingredients) : [],
+  }
+}
+
 export default function StaffDashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [orders, setOrders] = useState<Order[]>([
-    {
-      id: "1",
-      userId: "user1",
-      userName: "Alex Chen",
-      kitName: "White Ember",
-      status: "pending",
-      timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // 15 minutes ago
-      location: "Poolside, Lounge Chair 7",
-    },
-    {
-      id: "2",
-      userId: "user2",
-      userName: "Jordan Smith",
-      kitName: "Silver Mirage",
-      status: "in-progress",
-      timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutes ago
-      location: "Conference Room A",
-    },
-    {
-      id: "3",
-      userId: "user3",
-      userName: "Taylor Wong",
-      kitName: "Frost Echo",
-      status: "completed",
-      timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(), // 1 hour ago
-      location: "Gym, Treadmill Area",
-    },
-  ])
-  const [kits, setKits] = useState<Kit[]>([
-    {
-      id: "1",
-      name: "White Ember",
-      description: "Post-workout recovery with electrolytes and minerals",
-      archetype: "post_sweat_cool",
-      ingredients: ["Filtered Water", "Himalayan Salt", "Potassium", "Magnesium", "Zinc", "Lemon Extract"],
-    },
-    {
-      id: "2",
-      name: "Silver Mirage",
-      description: "Mental clarity and focus enhancement",
-      archetype: "mental_fog",
-      ingredients: ["Filtered Water", "L-Theanine", "Lion's Mane Extract", "Rhodiola", "Mint", "Ginger"],
-    },
-    {
-      id: "3",
-      name: "Frost Echo",
-      description: "Deep hydration with electrolyte balance for heavy sweaters",
-      archetype: "post_sweat_cool",
-      ingredients: ["Filtered Water", "Coconut Water", "Sea Salt", "Potassium Citrate", "Magnesium", "Cucumber"],
-    },
-    {
-      id: "4",
-      name: "Night Signal",
-      description: "Evening relaxation and recovery support",
-      archetype: "rest_reset",
-      ingredients: ["Filtered Water", "Tart Cherry", "Magnesium", "Glycine", "Chamomile", "Lavender"],
-    },
-  ])
+  const [orders, setOrders] = useState<Order[]>([])
+  const [kits, setKits] = useState<Kit[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedTab, setSelectedTab] = useState("pending")
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { toast } = useToast()
 
+  // Load data from Supabase
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true)
+      setError(null)
+      
+      try {
+        // Load orders
+        const dbOrders = await getOrders()
+        if (dbOrders && dbOrders.length > 0) {
+          setOrders(dbOrders.map(convertDBOrderToUI))
+        } else {
+          // If no orders, use empty array
+          setOrders([])
+        }
+        
+        // Load hydration kits
+        const dbKits = await getHydrationKits()
+        if (dbKits && dbKits.length > 0) {
+          setKits(dbKits.map(convertDBKitToUI))
+        } else {
+          // If no kits found, use fallback kits
+          setKits([
+            {
+              id: "1",
+              name: "White Ember",
+              description: "Post-workout recovery with electrolytes and minerals",
+              archetype: "post_sweat_cool",
+              ingredients: ["Filtered Water", "Himalayan Salt", "Potassium", "Magnesium", "Zinc", "Lemon Extract"],
+            },
+            {
+              id: "2",
+              name: "Silver Mirage",
+              description: "Mental clarity and focus enhancement",
+              archetype: "mental_fog",
+              ingredients: ["Filtered Water", "L-Theanine", "Lion's Mane Extract", "Rhodiola", "Mint", "Ginger"],
+            },
+          ])
+        }
+      } catch (err) {
+        console.error("Error loading staff data:", err)
+        setError("Failed to load data. Please try again.")
+        toast({
+          title: "Error loading data",
+          description: "Please check your connection and try again",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    
+    loadData()
+  }, [])
+  
   // Neon triangle animation
   useEffect(() => {
     const canvas = canvasRef.current
@@ -157,20 +184,35 @@ export default function StaffDashboard() {
     drawNeonEffects()
   }, [])
 
-  const updateOrderStatus = (orderId: string, newStatus: "pending" | "in-progress" | "completed") => {
-    setOrders(
-      orders.map((order) => {
-        if (order.id === orderId) {
-          return { ...order, status: newStatus }
-        }
-        return order
-      }),
-    )
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: "pending" | "in-progress" | "completed") => {
+    try {
+      // Update in database
+      const updatedOrder = await updateOrderStatus(orderId, newStatus)
+      
+      if (updatedOrder) {
+        // Update local state
+        const updatedOrders = orders.map((order) => {
+          if (order.id === orderId) {
+            return { ...order, status: newStatus }
+          }
+          return order
+        })
 
-    toast({
-      title: "Order Updated",
-      description: `Order status changed to ${newStatus}`,
-    })
+        setOrders(updatedOrders)
+
+        toast({
+          title: `Order ${newStatus}`,
+          description: `Order #${orderId.slice(0, 5)} has been updated to ${newStatus}`,
+        })
+      }
+    } catch (error) {
+      console.error("Error updating order status:", error)
+      toast({
+        title: "Update failed",
+        description: "Could not update the order status. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const filteredOrders = orders.filter((order) => {
@@ -345,36 +387,32 @@ export default function StaffDashboard() {
                     </div>
 
                     <div className="flex justify-end gap-2 mt-4">
-                      {order.status === "pending" && (
+                      <div className="flex space-x-2 mt-2">
                         <Button
                           size="sm"
-                          className="bg-blue-400/20 border border-blue-400/60 hover:bg-blue-400/30"
-                          style={{ color: "#4FC3F7" }}
-                          onClick={() => updateOrderStatus(order.id, "in-progress")}
+                          variant={order.status === "pending" ? "secondary" : "outline"}
+                          className={order.status === "pending" ? "bg-purple-600 hover:bg-purple-700" : ""}
+                          onClick={() => handleUpdateOrderStatus(order.id, "pending")}
                         >
-                          Start Preparing
+                          Pending
                         </Button>
-                      )}
-                      {order.status === "in-progress" && (
                         <Button
                           size="sm"
-                          className="bg-green-400/20 border border-green-400/60 hover:bg-green-400/30"
-                          style={{ color: "#66BB6A" }}
-                          onClick={() => updateOrderStatus(order.id, "completed")}
+                          variant={order.status === "in-progress" ? "secondary" : "outline"}
+                          className={order.status === "in-progress" ? "bg-blue-600 hover:bg-blue-700" : ""}
+                          onClick={() => handleUpdateOrderStatus(order.id, "in-progress")}
                         >
-                          Mark Delivered
+                          In Progress
                         </Button>
-                      )}
-                      {order.status === "completed" && (
                         <Button
                           size="sm"
-                          className="bg-pink-400/20 border border-pink-400/60 hover:bg-pink-400/30"
-                          style={{ color: "#FF6B9D" }}
-                          onClick={() => updateOrderStatus(order.id, "pending")}
+                          variant={order.status === "completed" ? "secondary" : "outline"}
+                          className={order.status === "completed" ? "bg-green-600 hover:bg-green-700" : ""}
+                          onClick={() => handleUpdateOrderStatus(order.id, "completed")}
                         >
-                          Reset Order
+                          Completed
                         </Button>
-                      )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>

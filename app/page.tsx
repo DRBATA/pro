@@ -101,13 +101,20 @@ export default function LoginPage() {
         </h1>
         <p className="text-gray-300 mt-2 mb-12">Hydration Reimagined</p>
 
-        <div className="flex flex-col gap-6 w-64 mx-auto">
+        <div className="flex flex-col gap-4 w-64 mx-auto">
           <Button
             className="bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30 py-6"
             style={{ color: "#00FFFF" }}
-            onClick={() => router.push("/dashboard")}
+            onClick={() => router.push("/login")}
           >
             <User className="h-5 w-5 mr-3" /> User Login
+          </Button>
+          <Button
+            className="bg-green-400/20 border border-green-400/60 hover:bg-green-400/30 py-6"
+            style={{ color: "#00FF88" }}
+            onClick={() => router.push("/register")}
+          >
+            <User className="h-5 w-5 mr-3" /> Create Account
           </Button>
           <Button
             className="bg-pink-400/20 border border-pink-400/60 hover:bg-pink-400/30 py-6"

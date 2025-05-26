@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
-import { getOrders, getHydrationKits, updateOrderStatus } from "@/lib/database-functions"
+import { getClientOrders, getClientHydrationKits, updateClientOrderStatus } from "@/lib/client-staff"
 import { Order as DBOrder, HydrationKit as DBKit } from "@/lib/types/database.types"
 
 // Frontend Order type for UI state management
@@ -75,7 +75,7 @@ export default function StaffDashboard() {
       
       try {
         // Load orders
-        const dbOrders = await getOrders()
+        const dbOrders = await getClientOrders()
         if (dbOrders && dbOrders.length > 0) {
           setOrders(dbOrders.map(convertDBOrderToUI))
         } else {
@@ -84,7 +84,7 @@ export default function StaffDashboard() {
         }
         
         // Load hydration kits
-        const dbKits = await getHydrationKits()
+        const dbKits = await getClientHydrationKits()
         if (dbKits && dbKits.length > 0) {
           setKits(dbKits.map(convertDBKitToUI))
         } else {

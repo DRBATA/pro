@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
-import { User, Droplets } from "lucide-react"
+import { User, Droplets, Eye, EyeOff } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -32,6 +32,7 @@ export function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [loginSuccess, setLoginSuccess] = useState(false)
   const [userData, setUserData] = useState<{isStaff: boolean} | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -111,13 +112,23 @@ export function LoginForm() {
             
             <div className="space-y-2">
               <Label htmlFor="password" className="text-slate-200">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                className="bg-slate-700/70 border-slate-600 text-slate-100"
-                placeholder="••••••••"
-                {...form.register("password")}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  className="bg-slate-700/70 border-slate-600 text-slate-100 pr-10"
+                  placeholder="••••••••"
+                  {...form.register("password")}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-100"
+                  onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {form.formState.errors.password && (
                 <p className="text-red-400 text-sm">{form.formState.errors.password.message}</p>
               )}

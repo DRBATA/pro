@@ -105,20 +105,23 @@ export async function loginUser(
       return { user: null, isStaff: false, error: 'User not found' }
     }
 
-    // Get auth credentials from user_auth table
-    const { data: authData, error: authError } = await supabase
+    // Get auth credentials from user_auth table without using .single()
+    const { data: authDataArray, error: authError } = await supabase
       .from('user_auth')
       .select('*')
       .eq('email', email)
-      .single()
 
     if (authError) {
       throw new Error(`Auth error: ${authError.message}`)
     }
 
-    if (!authData) {
+    // Check if we found any auth records
+    if (!authDataArray || authDataArray.length === 0) {
       return { user: null, isStaff: false, error: 'Invalid credentials' }
     }
+    
+    // Use the first auth record found
+    const authData = authDataArray[0]
 
     // Verify password using bcrypt
     const passwordValid = await bcrypt.compare(password, authData.password_hash)

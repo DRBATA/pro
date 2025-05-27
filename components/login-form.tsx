@@ -18,7 +18,7 @@ import { loginUserClient } from "@/lib/client-auth"
 // Form validation schema
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(1, "Password is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
@@ -47,24 +47,31 @@ export function LoginForm() {
     setError(null)
     
     try {
-      // Login user with Supabase using client-safe function
-      const { user, isStaff, error } = await loginUserClient(data.email, data.password)
+      // Login user with Supabase using email and password
+      const result = await loginUserClient(data.email, data.password)
 
-      if (error) {
-        setError(error)
+      if (result.error) {
+        setError(result.error)
         return
       }
 
-      // Login successful - show success message and dashboard button
+      // Check if email is verified
+      if (result.isVerified === false) {
+        setError("Please verify your email before logging in. Check your inbox for a verification link.")
+        return
+      }
+
+      // Login successful
       setLoginSuccess(true)
-      setUserData({ isStaff: isStaff || false })
+      setUserData({ isStaff: result.isStaff || false })
+      
       // Store user data in local storage for persistence
       if (typeof window !== 'undefined') {
         localStorage.setItem('userLoggedIn', 'true')
-        localStorage.setItem('userIsStaff', isStaff ? 'true' : 'false')
+        localStorage.setItem('userIsStaff', result.isStaff ? 'true' : 'false')
       }
-    } catch (err) {
-      setError("An unexpected error occurred. Please try again.")
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred. Please try again.")
     } finally {
       setIsLoading(false)
     }
@@ -146,18 +153,20 @@ export function LoginForm() {
                   <svg className="h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Login successful! You can now access your dashboard.
+                  Magic link sent! Please check your email to complete login.
                 </div>
                 
-                <Button 
-                  className="w-full bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30 py-6"
-                  style={{ color: "#00FFFF" }}
-                  onClick={() => router.push(userData?.isStaff ? "/staff" : "/dashboard")}
-                >
-                  <div className="flex items-center">
-                    <Droplets className="h-5 w-5 mr-3" /> Go to {userData?.isStaff ? "Staff" : "User"} Dashboard
-                  </div>
-                </Button>
+                <div className="bg-slate-800/70 rounded-md p-4 text-slate-300 text-sm space-y-3">
+                  <p>
+                    We've sent a secure login link to <span className="text-cyan-300 font-medium">{form.getValues().email}</span>
+                  </p>
+                  <p>
+                    Click the link in the email to sign in to your account. The link will expire in 24 hours.
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Don't see the email? Check your spam folder or try again in a few minutes.
+                  </p>
+                </div>
               </div>
             ) : (
               <Button 

@@ -128,6 +128,8 @@ export default function Dashboard() {
   // Modal state
   const [showAddModal, setShowAddModal] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false)
+  const [userNickname, setUserNickname] = useState('')
   
   // Form state
   const [newEvent, setNewEvent] = useState<{

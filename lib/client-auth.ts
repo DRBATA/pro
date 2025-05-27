@@ -27,12 +27,15 @@ export async function checkEmailVerification(): Promise<AuthResponse> {
     // Check if the email has been verified
     const isVerified = data.session.user.email_confirmed_at !== null
     
-    // If verified, get the user profile
+    // If verified, get the user profile using Auth UUID
     if (isVerified) {
+      const authUserId = data.session.user.id;
+      if (!authUserId) throw new Error('Auth user ID not found');
+      
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('*')
-        .eq('email', data.session.user.email)
+        .eq('id', authUserId) // Query by UUID instead of email
         .single()
         
       if (userError && userError.code !== 'PGRST116') {
@@ -87,11 +90,16 @@ export async function registerUserClient(
     
     if (authError) throw authError;
     
-    // Step 2: Create the user profile in the users table
+    // Get the Auth UUID
+    const authUserId = authData.user?.id;
+    if (!authUserId) throw new Error('Auth user ID not found');
+    
+    // Step 2: Create the user profile in the users table WITH the Auth UUID
     const { data: profileData, error: profileError } = await supabase
       .from('users')
       .insert([
         { 
+          id: authUserId, // Use the Auth UUID as the primary key
           email,
           name,
           nickname,
@@ -134,11 +142,15 @@ export async function loginUserClient(
     // Since email verification is disabled, we don't need to check if email is verified
     // Just proceed with login
     
-    // Fetch user profile from our users table
+    // Get the Auth UUID from the current user's session
+    const authUserId = data.user?.id;
+    if (!authUserId) throw new Error('Auth user ID not found');
+    
+    // Fetch user profile from our users table using the Auth UUID
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('*')
-      .eq('email', email)
+      .eq('id', authUserId) // Query by UUID instead of email
       .single()
       
     if (userError && userError.code !== 'PGRST116') { // Not found error

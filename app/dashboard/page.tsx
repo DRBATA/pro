@@ -6,6 +6,7 @@ import { Plus, Droplets, Dumbbell, Clock, Target, User, ShoppingBag, Settings } 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { CreditsDisplay } from "@/components/credits-display"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -1006,6 +1007,9 @@ export default function UserDashboard() {
               </div>
             </div>
           </Card>
+
+          {/* Credits Display */}
+          <CreditsDisplay userId={userId} />
 
           {/* Active Orders */}
           {orders.length > 0 && (

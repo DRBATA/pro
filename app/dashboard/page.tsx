@@ -187,7 +187,7 @@ export default function Dashboard() {
     getSessionData();
     
     // Set up auth state change listener (recommended in Supabase docs)
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event: string, session: any) => {
       console.log('Auth state changed:', event);
       if (session?.user?.email) {
         setSessionEmail(session.user.email);
@@ -219,77 +219,30 @@ export default function Dashboard() {
         const hydrationGapResult = await calculateUserHydrationGaps(user?.id || '');
         
         if (hydrationGapResult && user?.id) {
-          // DIRECT DATABASE QUERY - bypass the helper function to diagnose the issue
-          console.log('Attempting direct database query with:', { email: user.email });
-          
-          // Direct query to users table
-          const { data: directProfileData, error: directProfileError } = await supabase
+          // Direct query to users table with exact email
+          console.log('Querying for user with email:', user.email);
+          const { data: profile, error: profileError } = await supabase
             .from('users')
             .select('*')
             .eq('email', user.email)
             .single();
             
-          console.log('Direct query results:', { data: directProfileData, error: directProfileError });
-          
-          // Also try with session email as backup
-          const { data: sessionData } = await supabase.auth.getSession();
-          const sessionEmail = sessionData?.session?.user?.email;
-          
-          let profile;
-          
-          if (directProfileData) {
-            console.log('Using direct query profile data');
-            profile = directProfileData;
-          } else if (sessionEmail && sessionEmail !== user.email) {
-            console.log('Trying with session email:', sessionEmail);
-            const { data: sessionProfileData } = await supabase
-              .from('users')
-              .select('*')
-              .eq('email', sessionEmail)
-              .single();
-              
-            if (sessionProfileData) {
-              console.log('Found profile with session email');
-              profile = sessionProfileData;
-            } else {
-              // Fallback to helper function
-              console.log('Falling back to helper function');
-              profile = await getUserProfile(user.id, user.email);
-            }
-          } else {
-            // Fallback to helper function
-            console.log('Falling back to helper function');
-            profile = await getUserProfile(user.id, user.email);
-          }
-          
-          console.log('Final user profile:', profile);
+          console.log('User profile query result:', { profile, profileError });
           
           if (profile) {
-            // Handle conversion of database values to proper types
-            // Important: Make sure weight is treated as a number
-            const profileWeight = typeof profile.weight === 'number' ? profile.weight : 
-                                  typeof profile.weight === 'string' ? parseFloat(profile.weight) : 70;
-                                  
-            // Make sure body_type is one of our valid BodyType values
-            const validBodyTypes = ['muscular', 'average', 'stocky', 'toned', 'curvy'];
-            const profileBodyType = profile.body_type && 
-                                  validBodyTypes.includes(profile.body_type) ? 
-                                  profile.body_type as BodyType : 'average';
-            
+            // Use exact values from database with minimal processing
             setUserProfile({
-              weight: profileWeight,
-              sex: profile.sex as 'male' | 'female' || 'male',
-              bodyType: profileBodyType,
-              name: profile.name || '',
+              weight: typeof profile.weight === 'string' ? parseFloat(profile.weight) : profile.weight,
+              sex: profile.sex as 'male' | 'female',
+              bodyType: profile.body_type as BodyType,
+              name: profile.name,
             });
             
-            console.log('Setting user profile to:', {
-              weight: profileWeight,
-              originalWeight: profile.weight,
+            console.log('Setting user profile directly from database:', {
+              weight: profile.weight,
               weightType: typeof profile.weight,
               sex: profile.sex,
-              bodyType: profileBodyType,
-              originalBodyType: profile.body_type,
+              bodyType: profile.body_type,
               name: profile.name
             });
           }

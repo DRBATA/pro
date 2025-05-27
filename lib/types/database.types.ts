@@ -1,7 +1,11 @@
 // Database types based on the Supabase schema
 
-// User type for authentication and profile management
+// Export all required database table types
 export type User = Database['public']['Tables']['users']['Row'];
+export type HydrationEvent = Database['public']['Tables']['hydration_events']['Row'];
+export type DailyTarget = Database['public']['Tables']['daily_targets']['Row'];
+export type HydrationKit = Database['public']['Tables']['hydration_kits']['Row'];
+export type Order = Database['public']['Tables']['orders']['Row'];
 
 export interface Database {
   public: {
@@ -44,6 +48,8 @@ export interface Database {
           updated_at?: string
         }
       }
+      
+
       
       // Legacy tables - might be migrated or deprecated
       hydration_events: {

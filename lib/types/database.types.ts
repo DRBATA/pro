@@ -1,5 +1,8 @@
 // Database types based on the Supabase schema
 
+// User type for authentication and profile management
+export type User = Database['public']['Tables']['users']['Row'];
+
 export interface Database {
   public: {
     Tables: {

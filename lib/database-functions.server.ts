@@ -32,24 +32,25 @@ export async function registerUser(
       return { user: null, error: 'User with this email already exists' }
     }
 
-    // Hash the password
+    // Generate salt and hash the password for custom auth
     const saltRounds = 10
-    const hashedPassword = await bcrypt.hash(password, saltRounds)
-
-    // Create auth user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password: hashedPassword,
-      options: {
-        data: {
-          name,
-          is_staff: false
-        }
-      }
-    })
+    const salt = await bcrypt.genSalt(saltRounds)
+    const hashedPassword = await bcrypt.hash(password, salt)
+    
+    // Store credentials in user_auth table
+    const { error: authError } = await supabase
+      .from('user_auth')
+      .insert([{
+        email,
+        password_hash: hashedPassword,
+        salt,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        failed_attempts: 0
+      }])
 
     if (authError) {
-      throw new Error(authError.message)
+      throw new Error(`Auth error: ${authError.message}`)
     }
 
     // Create user profile
@@ -104,17 +105,57 @@ export async function loginUser(
       return { user: null, isStaff: false, error: 'User not found' }
     }
 
-    // Get auth user to verify password
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
+    // Get auth credentials from user_auth table
+    const { data: authData, error: authError } = await supabase
+      .from('user_auth')
+      .select('*')
+      .eq('email', email)
+      .single()
 
     if (authError) {
-      throw new Error(authError.message)
+      throw new Error(`Auth error: ${authError.message}`)
     }
 
-    const isStaff = authData.user.user_metadata.is_staff || false
+    if (!authData) {
+      return { user: null, isStaff: false, error: 'Invalid credentials' }
+    }
+
+    // Verify password using bcrypt
+    const passwordValid = await bcrypt.compare(password, authData.password_hash)
+    
+    if (!passwordValid) {
+      // Update failed attempts
+      await supabase
+        .from('user_auth')
+        .update({ 
+          failed_attempts: authData.failed_attempts + 1,
+          updated_at: new Date().toISOString(),
+          // Optionally lock account after X failed attempts
+          ...(authData.failed_attempts + 1 >= 5 ? { 
+            locked_until: new Date(Date.now() + 30 * 60000).toISOString() // Lock for 30 minutes
+          } : {})
+        })
+        .eq('email', email)
+      
+      return { user: null, isStaff: false, error: 'Invalid credentials' }
+    }
+    
+    // Reset failed attempts on successful login
+    await supabase
+      .from('user_auth')
+      .update({ 
+        failed_attempts: 0,
+        updated_at: new Date().toISOString(),
+        locked_until: null
+      })
+      .eq('email', email)
+    
+    // Check if account is locked
+    if (authData.locked_until && new Date(authData.locked_until) > new Date()) {
+      return { user: null, isStaff: false, error: 'Account is locked. Try again later.' }
+    }
+      
+    const isStaff = users[0].is_staff || false
 
     return { user: users[0], isStaff, error: null }
   } catch (error: any) {

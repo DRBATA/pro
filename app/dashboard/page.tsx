@@ -150,9 +150,9 @@ export default function Dashboard() {
       setIsLoading(true);
       try {
         // Calculate hydration gap using our hydration-data-functions
-        const hydrationGapResult = await calculateUserHydrationGaps(user.id);
+        const hydrationGapResult = await calculateUserHydrationGaps(user?.id || '');
         
-        if (hydrationGapResult) {
+        if (hydrationGapResult && user?.id) {
           // Set user profile
           const profile = await getUserProfile(user.id);
           if (profile) {
@@ -185,7 +185,7 @@ export default function Dashboard() {
           const hydrationData = {
             hydrationGap: hydrationGapResult.water_gap_ml,
             context: `Based on your ${hydrationGapResult.summary?.total_activity_minutes || 0} minutes of activity`,
-            leanBodyMass: profile?.weight * 0.7 || 50, // Estimate LBM as 70% of weight
+            leanBodyMass: (profile?.weight || 70) * 0.7, // Estimate LBM as 70% of weight
             waterLoss: hydrationGapResult.water_gap_ml,
             waterFromFood: 0, // Not tracked in new system yet
             totalWaterInput: hydrationGapResult.summary?.total_water_ml || 0,
@@ -284,10 +284,11 @@ export default function Dashboard() {
       });
       
       // Save profile to Supabase
-      const updatedProfile = await updateUserProfile(user.id, {
+      const updatedProfile = await updateUserProfile(user?.id || '', {
         weight: userProfile.weight,
         sex: userProfile.sex,
-        body_type: userProfile.bodyType
+        // Convert the bodyType to a valid type that matches database schema
+        body_type: userProfile.bodyType as any
       });
       
       if (updatedProfile) {

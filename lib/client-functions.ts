@@ -7,8 +7,36 @@ import { calculateHydrationGap, ActivityIntensity, ActivityContext } from './hyd
 // Client-safe database functions (no bcrypt or other Node.js native modules)
 
 // User profile functions
-export async function getUserProfile(userId: string): Promise<User | null> {
+export async function getUserProfile(userId: string, email?: string): Promise<User | null> {
   try {
+    // If email is provided, use it as the primary lookup method
+    if (email) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .single()
+      
+      if (error) throw error
+      return data
+    }
+    
+    // If no email is provided, try to get the user's email from their session
+    const { data: sessionData } = await supabase.auth.getSession()
+    const userEmail = sessionData?.session?.user?.email
+    
+    if (userEmail) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', userEmail)
+        .single()
+      
+      if (error) throw error
+      return data
+    }
+    
+    // Fallback to using UUID if email methods fail
     const { data, error } = await supabase
       .from('users')
       .select('*')

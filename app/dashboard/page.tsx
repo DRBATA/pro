@@ -22,6 +22,7 @@ import {
   getUserProfile,
   updateUserProfile
 } from "@/lib/client-functions"
+import { supabase } from "@/lib/supabase-client"
 
 // Body type display mapping with type safety
 const BODY_TYPES: Record<string, { name: string }> = {
@@ -144,12 +145,56 @@ export default function Dashboard() {
     description: ""
   })
   
-  // Log user object to see its structure
+  // State for user session
+  const [sessionEmail, setSessionEmail] = useState<string>("");
+  const [sessionLoading, setSessionLoading] = useState(true);
+  
+  // Get session data directly from Supabase (best practice)
   useEffect(() => {
-    if (user) {
-      console.log('User object:', user);
-    }
-  }, [user]);
+    // Function to get session data
+    const getSessionData = async () => {
+      try {
+        setSessionLoading(true);
+        // Get the current session from Supabase
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          return;
+        }
+        
+        if (data?.session?.user?.email) {
+          // Set the email from the session
+          setSessionEmail(data.session.user.email);
+          console.log('Session data retrieved successfully:', data.session.user);
+        } else {
+          console.log('No session or user email found', data);
+        }
+      } catch (error) {
+        console.error('Error in getSessionData:', error);
+      } finally {
+        setSessionLoading(false);
+      }
+    };
+    
+    // Call the function
+    getSessionData();
+    
+    // Set up auth state change listener (recommended in Supabase docs)
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('Auth state changed:', event);
+      if (session?.user?.email) {
+        setSessionEmail(session.user.email);
+      } else {
+        setSessionEmail("");
+      }
+    });
+    
+    // Clean up the listener on unmount
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
   // Load user data on component mount
   useEffect(() => {
@@ -361,7 +406,8 @@ export default function Dashboard() {
           <div className="text-sm opacity-70 flex items-center gap-2">
             {/* Display greeting using available user data */}
             <span className="mr-4 font-medium" style={{ color: "#00FFFF" }}>
-              Hello, {user?.email ? user.email.split('@')[0] : "ERROR"}
+              Hello, {sessionLoading ? "loading..." : 
+                     sessionEmail ? sessionEmail.split('@')[0] : "USER"}
             </span>
             <span>
               {userProfile.weight}kg • {getBodyTypeName(userProfile.bodyType)}

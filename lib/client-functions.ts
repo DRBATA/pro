@@ -9,41 +9,68 @@ import { calculateHydrationGap, ActivityIntensity, ActivityContext } from './hyd
 // User profile functions
 export async function getUserProfile(userId: string, email?: string): Promise<User | null> {
   try {
+    console.log('getUserProfile called with:', { userId, email });
+    
     // If email is provided, use it as the primary lookup method
     if (email) {
+      console.log('Looking up user by email:', email);
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('email', email)
         .single()
       
-      if (error) throw error
-      return data
+      console.log('Email lookup result:', { data, error });
+      
+      if (error) {
+        console.error('Error looking up by email:', error.message);
+        // Don't throw here, continue to the next method
+      } else if (data) {
+        console.log('User found by email:', data);
+        return data;
+      }
     }
     
     // If no email is provided, try to get the user's email from their session
+    console.log('No email provided or email lookup failed, getting from session');
     const { data: sessionData } = await supabase.auth.getSession()
     const userEmail = sessionData?.session?.user?.email
     
     if (userEmail) {
+      console.log('Looking up user by session email:', userEmail);
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('email', userEmail)
         .single()
       
-      if (error) throw error
-      return data
+      console.log('Session email lookup result:', { data, error });
+      
+      if (error) {
+        console.error('Error looking up by session email:', error.message);
+        // Continue to UUID lookup
+      } else if (data) {
+        console.log('User found by session email:', data);
+        return data;
+      }
     }
     
     // Fallback to using UUID if email methods fail
+    console.log('Falling back to UUID lookup:', userId);
     const { data, error } = await supabase
       .from('users')
       .select('*')
       .eq('id', userId)
       .single()
     
-    if (error) throw error
+    console.log('UUID lookup result:', { data, error });
+    
+    if (error) {
+      console.error('Error looking up by UUID:', error.message);
+      return null;
+    }
+    
+    console.log('User found by UUID:', data);
     return data
   } catch (error) {
     console.error("Error fetching user profile:", error)

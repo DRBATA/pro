@@ -97,10 +97,16 @@ export default function Dashboard() {
   const { toast } = useToast()
   
   // User profile state
-  const [userProfile, setUserProfile] = useState({
+  const [userProfile, setUserProfile] = useState<{
+    weight: number;
+    sex: 'male' | 'female';
+    bodyType: BodyType;
+    name?: string;
+  }>({
     weight: 70,
     sex: 'male' as 'male' | 'female',
     bodyType: 'average' as BodyType,
+    name: undefined,
   })
   
   // Timeline and events state
@@ -209,11 +215,22 @@ export default function Dashboard() {
         if (hydrationGapResult && user?.id) {
           // Set user profile using email as the primary lookup method
           const profile = await getUserProfile(user.id, user.email);
+          console.log('User profile from database:', profile);
+          
           if (profile) {
+            // Don't use || operator for defaults as it can cause issues with valid 0 values
             setUserProfile({
-              weight: profile.weight || 70,
+              weight: profile.weight !== null && profile.weight !== undefined ? profile.weight : 70,
               sex: profile.sex as 'male' | 'female' || 'male',
               bodyType: profile.body_type as BodyType || 'average',
+              name: profile.name, // Add the name field from the profile
+            });
+            
+            console.log('Setting user profile to:', {
+              weight: profile.weight !== null && profile.weight !== undefined ? profile.weight : 70,
+              sex: profile.sex,
+              bodyType: profile.body_type,
+              name: profile.name
             });
           }
           
@@ -406,7 +423,8 @@ export default function Dashboard() {
           <div className="text-sm opacity-70 flex items-center gap-2">
             {/* Display greeting using available user data */}
             <span className="mr-4 font-medium" style={{ color: "#00FFFF" }}>
-              Hello, {sessionLoading ? "loading..." : 
+              Hello, {isLoading ? "loading..." : 
+                     userProfile.name ? userProfile.name : 
                      sessionEmail ? sessionEmail.split('@')[0] : "USER"}
             </span>
             <span>

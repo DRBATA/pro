@@ -6,7 +6,6 @@ import {
   Calendar, 
   Clock, 
   Droplet, 
-  DropletHalf, 
   PlusCircle, 
   Activity,
   Check,
@@ -14,6 +13,7 @@ import {
   Coffee,
   Utensils
 } from 'lucide-react'
+// DropletHalf is not available, use Droplet as fallback
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from './ui/button'
 import { 

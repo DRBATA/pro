@@ -21,7 +21,7 @@ import {
 import {
   getUserProfile,
   updateUserProfile
-} from "@/lib/database-functions"
+} from "@/lib/client-functions"
 
 // Body type display mapping with type safety
 const BODY_TYPES: Record<string, { name: string }> = {

@@ -23,17 +23,12 @@ const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   name: z.string().min(2, "Name must be at least 2 characters"),
-  nickname: z.string().min(2, "Display name must be at least 2 characters").optional(),
   weight: z.coerce.number().min(20, "Weight must be at least 20kg").max(250, "Weight must be less than 250kg"),
   sex: z.enum(["male", "female"], {
     invalid_type_error: "Please select your biological sex",
   }),
   bodyType: z.string({
     required_error: "Please select a body type",
-  }),
-  phoneNumber: z.string().optional(),
-  contactPreference: z.enum(["email", "whatsapp", "phone", "text"], {
-    invalid_type_error: "Please select a contact preference",
   }),
 })
 
@@ -52,12 +47,9 @@ export function RegisterForm() {
       email: "",
       password: "",
       name: "",
-      nickname: "",
       weight: undefined,
       sex: "male",
       bodyType: undefined,
-      phoneNumber: "",
-      contactPreference: "email",
     },
   })
   
@@ -84,12 +76,12 @@ export function RegisterForm() {
         data.email, 
         data.password, 
         data.name, 
-        data.nickname || "", // Include the nickname
+        "", // Empty nickname
         data.weight, 
         data.sex,
         data.bodyType,
-        data.phoneNumber || "",
-        data.contactPreference
+        "", // Empty phone number
+        "email" // Default contact preference
       )
 
       if (error) {
@@ -182,19 +174,7 @@ export function RegisterForm() {
               )}
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="nickname" className="text-slate-200">Display Name (what you'd like to be known as)</Label>
-              <Input
-                id="nickname"
-                type="text"
-                className="bg-slate-700/70 border-slate-600 text-slate-100"
-                placeholder="HydrationChamp"
-                {...form.register("nickname")}
-              />
-              {form.formState.errors.nickname && (
-                <p className="text-red-400 text-sm">{form.formState.errors.nickname.message}</p>
-              )}
-            </div>
+
             
             <div className="space-y-2">
               <Label htmlFor="weight" className="text-slate-200">Weight (kg)</Label>
@@ -264,48 +244,7 @@ export function RegisterForm() {
               </div>
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="phoneNumber" className="text-slate-200">Phone Number (Optional)</Label>
-              <Input
-                id="phoneNumber"
-                type="tel"
-                className="bg-slate-700/70 border-slate-600 text-slate-100"
-                placeholder="+971 XX XXX XXXX"
-                {...form.register("phoneNumber")}
-              />
-            </div>
 
-            <div className="space-y-2">
-              <Label className="text-slate-200">Preferred Contact Method</Label>
-              <RadioGroup
-                value={form.watch("contactPreference")}
-                onValueChange={(value) => {
-                  form.setValue("contactPreference", value as "email" | "whatsapp" | "phone" | "text");
-                  form.clearErrors("contactPreference");
-                }}
-                className="flex flex-col space-y-1"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="email" id="email-contact" className="border-cyan-500" />
-                  <Label htmlFor="email-contact" className="text-sm">Email</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="whatsapp" id="whatsapp" className="border-cyan-500" />
-                  <Label htmlFor="whatsapp" className="text-sm">WhatsApp</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="phone" id="phone" className="border-cyan-500" />
-                  <Label htmlFor="phone" className="text-sm">Phone Call</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="text" id="text" className="border-cyan-500" />
-                  <Label htmlFor="text" className="text-sm">Text Message</Label>
-                </div>
-              </RadioGroup>
-              {form.formState.errors.contactPreference && (
-                <p className="text-xs text-red-500">{form.formState.errors.contactPreference.message}</p>
-              )}
-            </div>
             {error && (
               <div className="bg-red-900/20 border border-red-500/50 text-red-300 rounded-md p-3 text-sm">
                 {error}

@@ -144,6 +144,13 @@ export default function Dashboard() {
     description: ""
   })
   
+  // Log user object to see its structure
+  useEffect(() => {
+    if (user) {
+      console.log('User object:', user);
+    }
+  }, [user]);
+
   // Load user data on component mount
   useEffect(() => {
     if (!user) return;
@@ -155,8 +162,8 @@ export default function Dashboard() {
         const hydrationGapResult = await calculateUserHydrationGaps(user?.id || '');
         
         if (hydrationGapResult && user?.id) {
-          // Set user profile
-          const profile = await getUserProfile(user.id);
+          // Set user profile using email as the primary lookup method
+          const profile = await getUserProfile(user.id, user.email);
           if (profile) {
             setUserProfile({
               weight: profile.weight || 70,
@@ -352,6 +359,10 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-4">
           <div className="text-sm opacity-70 flex items-center gap-2">
+            {/* Display greeting using available user data */}
+            <span className="mr-4 font-medium" style={{ color: "#00FFFF" }}>
+              Hello, {user?.email ? user.email.split('@')[0] : "ERROR"}
+            </span>
             <span>
               {userProfile.weight}kg • {getBodyTypeName(userProfile.bodyType)}
             </span>

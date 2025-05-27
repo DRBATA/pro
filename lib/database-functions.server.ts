@@ -32,10 +32,9 @@ export async function registerUser(
       return { user: null, error: 'User with this email already exists' }
     }
 
-    // Generate salt and hash the password for custom auth
+    // Hash the password with bcrypt (salt is automatically embedded in the hash)
     const saltRounds = 10
-    const salt = await bcrypt.genSalt(saltRounds)
-    const hashedPassword = await bcrypt.hash(password, salt)
+    const hashedPassword = await bcrypt.hash(password, saltRounds)
     
     // Store credentials in user_auth table
     const { error: authError } = await supabase
@@ -43,7 +42,6 @@ export async function registerUser(
       .insert([{
         email,
         password_hash: hashedPassword,
-        salt,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         failed_attempts: 0

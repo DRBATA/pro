@@ -17,7 +17,8 @@ export async function registerUserClient(
 ): Promise<{ user: User | null; error: string | null }> {
   try {
     // Call a server action or API endpoint to handle the secure parts
-    const response = await fetch('/api/auth/register', {
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const response = await fetch(`${baseUrl}/api/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,7 +56,8 @@ export async function loginUserClient(
 ): Promise<{ user: User | null; isStaff: boolean; error: string | null }> {
   try {
     // Call a server action or API endpoint to handle the secure parts
-    const response = await fetch('/api/auth/login', {
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const response = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

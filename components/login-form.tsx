@@ -47,26 +47,49 @@ export function LoginForm() {
     setError(null)
     
     try {
-      // Login user with Supabase using email and password
-      const result = await loginUserClient(data.email, data.password)
+      // Direct login using Supabase client to bypass any middleware issues
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      })
 
-      if (result.error) {
-        setError(result.error)
+      if (error) {
+        console.error('Login error:', error)
+        setError(error.message)
         return
       }
 
-      // Email verification is disabled, so we don't need to check verification status
+      console.log('Login successful:', authData)
+      
+      // Fetch user profile
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', data.email)
+        .single()
+        
+      if (userError && userError.code !== 'PGRST116') {
+        console.error('User fetch error:', userError)
+        setError(userError.message)
+        return
+      }
 
       // Login successful
       setLoginSuccess(true)
-      setUserData({ isStaff: result.isStaff || false })
+      setUserData({ isStaff: userData?.is_staff || false })
       
       // Store user data in local storage for persistence
       if (typeof window !== 'undefined') {
         localStorage.setItem('userLoggedIn', 'true')
-        localStorage.setItem('userIsStaff', result.isStaff ? 'true' : 'false')
+        localStorage.setItem('userIsStaff', userData?.is_staff ? 'true' : 'false')
       }
+      
+      // Auto-redirect after 1 second
+      setTimeout(() => {
+        router.push(userData?.is_staff ? '/staff' : '/dashboard')
+      }, 1000)
     } catch (err: any) {
+      console.error('Unexpected error:', err)
       setError(err.message || "An unexpected error occurred. Please try again.")
     } finally {
       setIsLoading(false)
@@ -149,20 +172,18 @@ export function LoginForm() {
                   <svg className="h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Magic link sent! Please check your email to complete login.
+                  Login successful! Redirecting to dashboard...
                 </div>
                 
-                <div className="bg-slate-800/70 rounded-md p-4 text-slate-300 text-sm space-y-3">
-                  <p>
-                    We've sent a secure login link to <span className="text-cyan-300 font-medium">{form.getValues().email}</span>
-                  </p>
-                  <p>
-                    Click the link in the email to sign in to your account. The link will expire in 24 hours.
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    Don't see the email? Check your spam folder or try again in a few minutes.
-                  </p>
-                </div>
+                <Button 
+                  className="w-full bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30 py-6"
+                  style={{ color: "#00FFFF" }}
+                  onClick={() => router.push(userData?.isStaff ? "/staff" : "/dashboard")}
+                >
+                  <div className="flex items-center">
+                    <Droplets className="h-5 w-5 mr-3" /> Go to {userData?.isStaff ? "Staff" : "User"} Dashboard
+                  </div>
+                </Button>
               </div>
             ) : (
               <Button 

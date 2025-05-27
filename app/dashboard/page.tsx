@@ -250,7 +250,7 @@ function calculateDailyNeeds(weight: number, sex: 'male' | 'female', bodyType: s
   }
 }
 
-export default function UserDashboard() {
+export default function Dashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { user } = useUser() // Use the UserContext for authentication
   

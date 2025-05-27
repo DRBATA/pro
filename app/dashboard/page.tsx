@@ -560,11 +560,13 @@ export default function Dashboard() {
           <Card className="bg-slate-800/50 border-slate-600 shadow-inner shadow-cyan-900/10 mb-4">
             <CardContent className="p-0">
               {isLoading ? (
-                <div className="flex items-center justify-center h-32">
-                  <div className="w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                <div className="flex items-center justify-center p-6">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <span>Loading timeline...</span>
                 </div>
-              ) : user && user.id ? (
-                <HydrationTimeline userId={user.id} />
+              ) : sessionEmail ? (
+                // If we have a session email, we are logged in
+                <HydrationTimeline userId={user?.id || 'current'} />
               ) : (
                 <div className="flex items-center justify-center p-6 text-red-400">
                   <p>Error: User not logged in. Please log in to view your hydration timeline.</p>

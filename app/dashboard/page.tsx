@@ -157,7 +157,7 @@ export default function Dashboard() {
   
   // Get session data directly from Supabase (best practice)
   useEffect(() => {
-    // Function to get session data
+    // Function to get session data and load user profile
     const getSessionData = async () => {
       try {
         setSessionLoading(true);
@@ -173,6 +173,48 @@ export default function Dashboard() {
           // Set the email from the session
           setSessionEmail(data.session.user.email);
           console.log('Session data retrieved successfully:', data.session.user);
+          
+          // Get metadata from the session when available
+          const metadata = data.session.user.user_metadata;
+          if (metadata) {
+            console.log('User metadata found:', metadata);
+            // If body_type exists in metadata, use it
+            if (metadata.body_type) {
+              console.log('Setting profile from metadata');
+              setUserProfile(prev => ({
+                ...prev,
+                bodyType: metadata.body_type as BodyType,
+                name: metadata.name || prev.name,
+                // Keep weight if it's not in metadata
+                weight: metadata.weight ? parseFloat(metadata.weight) : prev.weight,
+                sex: metadata.sex || prev.sex
+              }));
+            }
+          }
+          
+          // Directly load user profile with email
+          console.log('Loading profile for email:', data.session.user.email);
+          const { data: profileData, error: profileError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', data.session.user.email)
+            .single();
+          
+          if (profileError) {
+            console.error('Error loading profile:', profileError);
+          }
+          
+          if (profileData) {
+            console.log('Successfully loaded profile:', profileData);
+            setUserProfile({
+              weight: typeof profileData.weight === 'string' ? parseFloat(profileData.weight) : profileData.weight,
+              sex: profileData.sex as 'male' | 'female',
+              bodyType: profileData.body_type as BodyType,
+              name: profileData.name,
+            });
+          } else {
+            console.log('No profile found for email, using defaults');
+          }
         } else {
           console.log('No session or user email found', data);
         }

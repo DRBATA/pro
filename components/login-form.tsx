@@ -55,11 +55,7 @@ export function LoginForm() {
         return
       }
 
-      // Check if email is verified
-      if (result.isVerified === false) {
-        setError("Please verify your email before logging in. Check your inbox for a verification link.")
-        return
-      }
+      // Email verification is disabled, so we don't need to check verification status
 
       // Login successful
       setLoginSuccess(true)

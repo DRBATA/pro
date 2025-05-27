@@ -131,17 +131,8 @@ export async function loginUserClient(
     
     if (error) throw error
     
-    // Check if email is verified
-    const isVerified = data.user?.email_confirmed_at !== null
-    
-    // If not verified, return early
-    if (!isVerified) {
-      return {
-        user: null,
-        error: null,
-        isVerified: false
-      }
-    }
+    // Since email verification is disabled, we don't need to check if email is verified
+    // Just proceed with login
     
     // Fetch user profile from our users table
     const { data: userData, error: userError } = await supabase
@@ -157,8 +148,7 @@ export async function loginUserClient(
     return { 
       user: userData || null, 
       isStaff: userData?.is_staff || false,
-      error: null,
-      isVerified: true
+      error: null
     }
   } catch (error: any) {
     console.error('Error logging in:', error)

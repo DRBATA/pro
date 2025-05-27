@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
 import { 
   getUserDailyTimeline, 
   calculateUserHydrationGaps
@@ -155,6 +156,53 @@ export default function Dashboard() {
   const [sessionEmail, setSessionEmail] = useState<string>("");
   const [sessionLoading, setSessionLoading] = useState(true);
   
+  // State for tracking hydration values
+  const [waterIntake, setWaterIntake] = useState(0)
+  const [waterRemaining, setWaterRemaining] = useState(0)
+  const [proteinIntake, setProteinIntake] = useState(0)
+  const [sodiumIntake, setSodiumIntake] = useState(0)
+  const [potassiumIntake, setPotassiumIntake] = useState(0)
+  
+  // Function to calculate hydration targets based on user profile
+  const calculateHydrationTargets = (profile: any) => {
+    try {
+      console.log('Calculating user daily hydration summary:', profile);
+      
+      const weight = profile.weight || 70; // Default to 70kg if not set
+      const sex = profile.sex || 'male';
+      const bodyType = profile.bodyType || 'average';
+      
+      // Base calculations
+      const baseWaterPerKg = sex === 'male' ? 35 : 31;
+      const recommendedWater = weight * baseWaterPerKg;
+      
+      // Activity multiplier (assuming light activity)
+      const activityMultiplier = 1.2;
+      const adjustedWater = recommendedWater * activityMultiplier;
+      
+      // Electrolyte calculations (simplified)
+      const baseSodium = 1500; // mg per day
+      const basePotassium = 2500; // mg per day
+      const baseProtein = weight * 0.8; // 0.8g per kg
+      
+      // Update state with calculated values
+      setWaterIntake(0); // Current intake (from timeline data)
+      setWaterRemaining(Math.round(adjustedWater)); // Target
+      setProteinIntake(Math.round(baseProtein)); // Target
+      setSodiumIntake(Math.round(baseSodium)); // Target
+      setPotassiumIntake(Math.round(basePotassium)); // Target
+      
+      console.log('Hydration targets calculated:', {
+        water: Math.round(adjustedWater),
+        protein: Math.round(baseProtein),
+        sodium: Math.round(baseSodium),
+        potassium: Math.round(basePotassium)
+      });
+    } catch (error) {
+      console.error('Error calculating hydration targets:', error);
+    }
+  }
+
   // Get session data directly from Supabase (best practice)
   useEffect(() => {
     // Function to get session data and load user profile
@@ -181,14 +229,16 @@ export default function Dashboard() {
             // If body_type exists in metadata, use it
             if (metadata.body_type) {
               console.log('Setting profile from metadata');
-              setUserProfile(prev => ({
-                ...prev,
+              const updatedProfile = {
                 bodyType: metadata.body_type as BodyType,
-                name: metadata.name || prev.name,
-                // Keep weight if it's not in metadata
-                weight: metadata.weight ? parseFloat(metadata.weight) : prev.weight,
-                sex: metadata.sex || prev.sex
-              }));
+                name: metadata.name || userProfile.name,
+                weight: metadata.weight ? parseFloat(metadata.weight) : userProfile.weight,
+                sex: metadata.sex || userProfile.sex
+              };
+              
+              setUserProfile(updatedProfile);
+              // Calculate hydration targets with session metadata
+              calculateHydrationTargets(updatedProfile);
             }
           }
           
@@ -199,27 +249,44 @@ export default function Dashboard() {
             .select('*')
             .eq('email', data.session.user.email)
             .single();
-          
-          if (profileError) {
-            console.error('Error loading profile:', profileError);
-          }
+            
+          console.log('User profile query result:', { profileData, profileError });
           
           if (profileData) {
-            console.log('Successfully loaded profile:', profileData);
-            setUserProfile({
+            // Use exact values from database with minimal processing
+            const dbProfile = {
               weight: typeof profileData.weight === 'string' ? parseFloat(profileData.weight) : profileData.weight,
               sex: profileData.sex as 'male' | 'female',
               bodyType: profileData.body_type as BodyType,
               name: profileData.name,
+            };
+            
+            setUserProfile(dbProfile);
+            
+            console.log('Setting user profile directly from database:', {
+              weight: profileData.weight,
+              weightType: typeof profileData.weight,
+              sex: profileData.sex,
+              bodyType: profileData.body_type,
+              name: profileData.name
             });
+            
+            // Calculate hydration targets with database profile
+            calculateHydrationTargets(dbProfile);
           } else {
             console.log('No profile found for email, using defaults');
+            // Still calculate with whatever profile we have
+            calculateHydrationTargets(userProfile);
           }
         } else {
           console.log('No session or user email found', data);
+          // Still calculate with default profile
+          calculateHydrationTargets(userProfile);
         }
       } catch (error) {
         console.error('Error in getSessionData:', error);
+        // Use default profile for calculations if there's an error
+        calculateHydrationTargets(userProfile);
       } finally {
         setSessionLoading(false);
       }
@@ -675,51 +742,28 @@ export default function Dashboard() {
                   Daily Hydration Status
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-2">
                 {isLoading ? (
                   <div className="flex items-center justify-center h-32">
                     <div className="w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
                   </div>
-                ) : hydrationGapData ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-xs text-slate-400 mb-1">Water intake today</div>
-                        <div className="text-2xl font-medium" style={{ color: "#00FFFF" }}>
-                          {hydrationGapData.totalWaterInput.toLocaleString()}ml
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs text-slate-400 mb-1">Remaining</div>
-                        <div className="text-2xl font-medium text-red-400">
-                          {hydrationGapData.hydrationGap > 0
-                            ? `+${hydrationGapData.hydrationGap.toLocaleString()}ml`
-                            : "0ml"}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${hydrationPercentage(
-                            hydrationGapData.totalWaterInput,
-                            hydrationGapData.recommendedIntake
-                          )}%`,
-                          background: "linear-gradient(90deg, #00FFFF 0%, #0080FF 100%)",
-                          boxShadow: "0 0 8px rgba(0, 255, 255, 0.5)",
-                        }}
-                      />
-                    </div>
-                    
-                    <div className="text-xs text-slate-400">
-                      {hydrationGapData.context}
-                    </div>
-                  </div>
                 ) : (
-                  <div className="text-center p-4 text-slate-400">
-                    No hydration data available
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>Water intake today</span>
+                      <span>Target</span>
+                    </div>
+                    <div className="flex justify-between font-bold">
+                      <span>{waterIntake}ml</span>
+                      <span className="text-cyan-400">{waterRemaining}ml</span>
+                    </div>
+                    <Progress 
+                      value={waterIntake > 0 && waterRemaining > 0 ? (waterIntake / waterRemaining) * 100 : 0} 
+                      className="h-2 mt-1 bg-slate-800"
+                    />
+                    <div className="text-xs text-muted-foreground mt-2">
+                      Based on your {userProfile.weight}kg {userProfile.bodyType} build
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -734,81 +778,27 @@ export default function Dashboard() {
                   Hydration Targets
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="flex items-center justify-center h-32">
-                    <div className="w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <div className="text-xs text-slate-400">Water</div>
-                      <div className="text-lg font-medium" style={{ color: "#00FFFF" }}>
-                        {dailyTarget.water_ml.toLocaleString()}ml
-                      </div>
-                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: `${hydrationPercentage(
-                              hydrationGapData?.totalWaterInput || 0,
-                              dailyTarget.water_ml
-                            )}%`,
-                            background: "linear-gradient(90deg, #00FFFF 0%, #0080FF 100%)",
-                          }}
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <div className="text-xs text-slate-400">Protein</div>
-                      <div className="text-lg font-medium" style={{ color: "#FF6B9D" }}>
-                        {dailyTarget.protein_g.toLocaleString()}g
-                      </div>
-                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: "30%", // This would be calculated based on actual consumption
-                            background: "linear-gradient(90deg, #FF6B9D 0%, #FF2D55 100%)",
-                          }}
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <div className="text-xs text-slate-400">Sodium</div>
-                      <div className="text-lg font-medium" style={{ color: "#FFD166" }}>
-                        {dailyTarget.sodium_mg.toLocaleString()}mg
-                      </div>
-                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: "45%", // This would be calculated based on actual consumption
-                            background: "linear-gradient(90deg, #FFD166 0%, #FFB01F 100%)",
-                          }}
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-1">
-                      <div className="text-xs text-slate-400">Potassium</div>
-                      <div className="text-lg font-medium" style={{ color: "#06D6A0" }}>
-                        {dailyTarget.potassium_mg.toLocaleString()}mg
-                      </div>
-                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                        <div
-                          className="h-full rounded-full"
-                          style={{
-                            width: "20%", // This would be calculated based on actual consumption
-                            background: "linear-gradient(90deg, #06D6A0 0%, #039E74 100%)",
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <CardContent className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm mb-1">Water</div>
+                  <div className="font-bold">{waterRemaining}ml</div>
+                  <Progress value={75} className="h-2 mt-1 bg-slate-800" />
+                </div>
+                <div>
+                  <div className="text-sm mb-1">Protein</div>
+                  <div className="font-bold">{proteinIntake}g</div>
+                  <Progress value={60} className="h-2 mt-1 bg-slate-800" />
+                </div>
+                <div>
+                  <div className="text-sm mb-1">Sodium</div>
+                  <div className="font-bold">{sodiumIntake}mg</div>
+                  <Progress value={40} className="h-2 mt-1 bg-slate-800" />
+                </div>
+                <div>
+                  <div className="text-sm mb-1">Potassium</div>
+                  <div className="font-bold">{potassiumIntake}mg</div>
+                  <Progress value={30} className="h-2 mt-1 bg-slate-800" />
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -825,25 +815,17 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="flex items-center justify-center h-24">
-                  <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <div className="flex items-center justify-center h-32">
+                  <div className="w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
                 </div>
-              ) : hydrationGapData && hydrationGapData.hydrationGap > 0 ? (
-                <div className="space-y-4">
-                  <div className="p-3 bg-blue-400/10 border border-blue-400/30 rounded-md">
-                    <div className="flex items-start">
-                      <div className="mr-3 p-2 bg-blue-400/20 rounded-md">
-                        <Droplets className="h-5 w-5" style={{ color: "#9D8DF1" }} />
-                      </div>
-                      <div>
-                        <div className="font-medium" style={{ color: "#9D8DF1" }}>
-                          Hydration Gap Detected
-                        </div>
-                        <p className="text-sm text-slate-300 mt-1">
-                          You need an additional {hydrationGapData.hydrationGap.toLocaleString()}ml of water today.
-                          Consider adding an electrolyte drink if you've been active.
-                        </p>
-                      </div>
+              ) : userProfile && userProfile.weight > 0 ? (
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-medium" style={{ color: "#00FFFF" }}>
+                      Personalized Recommendations
+                    </h3>
+                    <div className="text-sm text-slate-400">
+                      Based on your {userProfile.weight}kg {userProfile.bodyType} build
                     </div>
                   </div>
                   

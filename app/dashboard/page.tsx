@@ -204,32 +204,92 @@ export default function Dashboard() {
 
   // Load user data on component mount
   useEffect(() => {
-    if (!user) return;
+    console.log('User data load effect triggered');
+    if (!user) {
+      console.log('No user, skipping profile load');
+      setIsLoading(false);
+      return;
+    }
     
     async function loadUserData() {      
+      console.log('Starting to load user data...');
       setIsLoading(true);
       try {
         // Calculate hydration gap using our hydration-data-functions
         const hydrationGapResult = await calculateUserHydrationGaps(user?.id || '');
         
         if (hydrationGapResult && user?.id) {
-          // Set user profile using email as the primary lookup method
-          const profile = await getUserProfile(user.id, user.email);
-          console.log('User profile from database:', profile);
+          // DIRECT DATABASE QUERY - bypass the helper function to diagnose the issue
+          console.log('Attempting direct database query with:', { email: user.email });
+          
+          // Direct query to users table
+          const { data: directProfileData, error: directProfileError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', user.email)
+            .single();
+            
+          console.log('Direct query results:', { data: directProfileData, error: directProfileError });
+          
+          // Also try with session email as backup
+          const { data: sessionData } = await supabase.auth.getSession();
+          const sessionEmail = sessionData?.session?.user?.email;
+          
+          let profile;
+          
+          if (directProfileData) {
+            console.log('Using direct query profile data');
+            profile = directProfileData;
+          } else if (sessionEmail && sessionEmail !== user.email) {
+            console.log('Trying with session email:', sessionEmail);
+            const { data: sessionProfileData } = await supabase
+              .from('users')
+              .select('*')
+              .eq('email', sessionEmail)
+              .single();
+              
+            if (sessionProfileData) {
+              console.log('Found profile with session email');
+              profile = sessionProfileData;
+            } else {
+              // Fallback to helper function
+              console.log('Falling back to helper function');
+              profile = await getUserProfile(user.id, user.email);
+            }
+          } else {
+            // Fallback to helper function
+            console.log('Falling back to helper function');
+            profile = await getUserProfile(user.id, user.email);
+          }
+          
+          console.log('Final user profile:', profile);
           
           if (profile) {
-            // Don't use || operator for defaults as it can cause issues with valid 0 values
+            // Handle conversion of database values to proper types
+            // Important: Make sure weight is treated as a number
+            const profileWeight = typeof profile.weight === 'number' ? profile.weight : 
+                                  typeof profile.weight === 'string' ? parseFloat(profile.weight) : 70;
+                                  
+            // Make sure body_type is one of our valid BodyType values
+            const validBodyTypes = ['muscular', 'average', 'stocky', 'toned', 'curvy'];
+            const profileBodyType = profile.body_type && 
+                                  validBodyTypes.includes(profile.body_type) ? 
+                                  profile.body_type as BodyType : 'average';
+            
             setUserProfile({
-              weight: profile.weight !== null && profile.weight !== undefined ? profile.weight : 70,
+              weight: profileWeight,
               sex: profile.sex as 'male' | 'female' || 'male',
-              bodyType: profile.body_type as BodyType || 'average',
-              name: profile.name, // Add the name field from the profile
+              bodyType: profileBodyType,
+              name: profile.name || '',
             });
             
             console.log('Setting user profile to:', {
-              weight: profile.weight !== null && profile.weight !== undefined ? profile.weight : 70,
+              weight: profileWeight,
+              originalWeight: profile.weight,
+              weightType: typeof profile.weight,
               sex: profile.sex,
-              bodyType: profile.body_type,
+              bodyType: profileBodyType,
+              originalBodyType: profile.body_type,
               name: profile.name
             });
           }
@@ -428,7 +488,7 @@ export default function Dashboard() {
                      sessionEmail ? sessionEmail.split('@')[0] : "USER"}
             </span>
             <span>
-              {userProfile.weight}kg • {getBodyTypeName(userProfile.bodyType)}
+              {isLoading ? "loading..." : `${userProfile.weight}kg • ${getBodyTypeName(userProfile.bodyType || 'average')}`}
             </span>
             <Button
               variant="ghost"

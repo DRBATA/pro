@@ -7,6 +7,7 @@ import { User, Droplets, Eye, EyeOff } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
+import { supabase } from "@/lib/supabase-client"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

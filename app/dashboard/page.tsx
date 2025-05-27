@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BODY_FAT_PERCENTAGES } from "@/lib/hydration-engine"
+import { useUser } from "@/lib/user-context"
+import { HydrationTimeline } from "@/components/hydration-timeline"
 
 // Body type display mapping
 const BODY_TYPES = {
@@ -56,6 +58,13 @@ import {
   createOrder,
   getUserHydrationGap
 } from "@/lib/client-functions"
+import {
+  calculateUserHydrationGaps,
+  getUserDailyTimeline,
+  addHydrationLog,
+  addActivityLog,
+  generateHydrationRecommendations
+} from "@/lib/hydration-data-functions"
 import { HydrationEvent as DBHydrationEvent, Order as DBOrder } from "@/lib/types/database.types"
 
 // Frontend Event types (for UI state management)
@@ -243,7 +252,8 @@ function calculateDailyNeeds(weight: number, sex: 'male' | 'female', bodyType: s
 
 export default function UserDashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [userId, setUserId] = useState<string | null>("testuser") // For dev
+  const { user } = useUser() // Use the UserContext for authentication
+  
   const [userProfile, setUserProfile] = useState({
     weight: 70,
     sex: 'male' as 'male' | 'female',
@@ -287,101 +297,102 @@ export default function UserDashboard() {
 
   // Load user data
   useEffect(() => {
-    // For demo purposes, we'll use a hardcoded user ID
-    // In a real app, you'd get this from an auth context
-    const tempUserId = "1234-5678-9101"; // This will be replaced with real auth
-    setUserId(tempUserId);
+    // Only load data when we have a logged in user
+    if (!user || !user.id) return;
     
-    async function loadUserData() {
-      if (!tempUserId) return;
-      
+    async function loadUserData() {      
       setIsLoading(true);
       try {
-        // Calculate hydration gap using the new function
-        const hydrationData = await getUserHydrationGap(tempUserId);
+        // Calculate hydration gap using our hydration-data-functions
+        const hydrationGapResult = await calculateUserHydrationGaps(user.id);
         
-        if (hydrationData) {
+        if (hydrationGapResult) {
           // Set user profile
-          if (hydrationData.user) {
+          const profile = await getUserProfile(user.id);
+          if (profile) {
             setUserProfile({
-              weight: hydrationData.user.weight,
-              sex: hydrationData.user.sex as 'male' | 'female',
-              bodyType: hydrationData.user.body_type as 'low' | 'average' | 'high',
+              weight: profile.weight || 70,
+              sex: profile.sex as 'male' | 'female' || 'male',
+              bodyType: profile.body_type as 'low' | 'average' | 'high' || 'average',
             });
           }
           
-          // Set events
-          if (hydrationData.events.length > 0) {
-            setEvents(hydrationData.events.map(convertDBEventToUI));
+          // Get timeline data using the new function
+          const timelineData = await getUserDailyTimeline(user.id);
+          if (timelineData && Array.isArray(timelineData)) {
+            // Convert timeline items to UI events format
+            const eventItems = timelineData
+              .filter(item => item.type === 'log' || item.type === 'activity')
+              .map(item => ({
+                id: item.id,
+                time: new Date(item.timestamp).toTimeString().slice(0, 5),
+                type: item.item_category === 'drink' ? 'water' : 
+                      item.item_category === 'activity' ? 'workout' : 'food',
+                amount: item.quantity,
+                description: item.item_name
+              }));
+            
+            setEvents(eventItems);
           }
           
-          // Set hydration gap data
-          setHydrationGapData({
-            hydrationGap: hydrationData.hydrationGap,
-            context: hydrationData.context,
-            leanBodyMass: hydrationData.leanBodyMass,
-            waterLoss: hydrationData.waterLoss,
-            waterFromFood: hydrationData.waterFromFood,
-            totalWaterInput: hydrationData.totalWaterInput,
-            recommendedIntake: hydrationData.recommendedIntake
-          });
+          // Set hydration gap data for the UI
+          const hydrationData = {
+            hydrationGap: hydrationGapResult.water_gap_ml,
+            context: `Based on your ${hydrationGapResult.summary?.total_activity_minutes || 0} minutes of activity`,
+            leanBodyMass: profile?.weight * 0.7 || 50, // Estimate LBM as 70% of weight
+            waterLoss: hydrationGapResult.water_gap_ml,
+            waterFromFood: 0, // Not tracked in new system yet
+            totalWaterInput: hydrationGapResult.summary?.total_water_ml || 0,
+            recommendedIntake: (hydrationGapResult.summary?.total_water_ml || 0) + hydrationGapResult.water_gap_ml
+          };
           
-          // Set daily target based on the calculated recommended intake
+          setHydrationGapData(hydrationData);
+          
+          // Set daily target based on the gap calculation
           setDailyTarget({
             water_ml: Math.round(hydrationData.recommendedIntake),
-            protein_g: Math.round(hydrationData.leanBodyMass * 1.2), // 1.2g per kg LBM
-            sodium_mg: Math.round(hydrationData.leanBodyMass * 25),  // 25mg per kg LBM
-            potassium_mg: Math.round(hydrationData.leanBodyMass * 80) // 80mg per kg LBM
+            protein_g: Math.round(hydrationGapResult.protein_gap_g + (hydrationGapResult.summary?.total_protein_g || 0)),
+            sodium_mg: Math.round(hydrationGapResult.sodium_gap_mg + (hydrationGapResult.summary?.total_sodium_mg || 0)),
+            potassium_mg: Math.round(hydrationGapResult.potassium_gap_mg + (hydrationGapResult.summary?.total_potassium_mg || 0))
           });
           
-          // Generate recommendation based on hydration gap
-          if (!recommendation) {
-            let recommendedKit = "Sky Salt"; // Default
-            let recommendationText = "";
+          // Generate recommendations using the new function
+          const recommendations = await generateHydrationRecommendations(user.id);
+          if (recommendations && recommendations.recommendations.length > 0) {
+            // Use the top recommendation
+            const topRec = recommendations.recommendations[0];
             
-            if (hydrationData.hydrationGap > 500) {
-              recommendedKit = "White Ember";
-              recommendationText = `You're currently at a ${Math.round(hydrationData.hydrationGap)}ml hydration deficit. We recommend the White Ember kit to replenish quickly.`;
-            } else if (hydrationData.context === 'active') {
-              recommendedKit = "Silver Mirage";
-              recommendationText = `Based on your activity level, we recommend the Silver Mirage kit to maintain optimal hydration.`;
-            } else if (hydrationData.context === 'fasting') {
-              recommendedKit = "Echo Spiral";
-              recommendationText = `While fasting, we recommend the Echo Spiral kit to maintain electrolyte balance.`;
-            } else {
-              recommendationText = `For your current hydration needs, we recommend the ${recommendedKit} kit.`;
+            // Map to existing kit types for UI compatibility
+            let kitType: KitType = 'Sky Salt';
+            if (hydrationGapResult.water_gap_ml > 1000) {
+              kitType = 'White Ember';
+            } else if (hydrationGapResult.sodium_gap_mg > 200) {
+              kitType = 'Silver Mirage';
+            } else if (hydrationGapResult.potassium_gap_mg > 300) {
+              kitType = 'Echo Spiral';
             }
             
             setRecommendation({
-              text: recommendationText,
-              kit: recommendedKit as KitType
+              text: `Based on your hydration needs, we recommend ${topRec.name} to replenish ${Math.round(topRec.water_contribution_ml)}ml of water and ${Math.round(topRec.sodium_contribution_mg)}mg of electrolytes.`,
+              kit: kitType
+            });
+          } else {
+            // Fallback recommendation
+            setRecommendation({
+              text: `You need approximately ${Math.round(hydrationGapResult.water_gap_ml)}ml more water today.`,
+              kit: 'Sky Salt'
             });
           }
         } else {
-          // Fallback to individual API calls if the hydration gap calculation fails
-          const profile = await getUserProfile(tempUserId);
-          if (profile) {
-            setUserProfile({
-              weight: profile.weight,
-              sex: profile.sex as 'male' | 'female',
-              bodyType: profile.body_type as 'low' | 'average' | 'high',
-            });
-          }
-          
-          const dbEvents = await getTodayHydrationEvents(tempUserId);
-          if (dbEvents && dbEvents.length > 0) {
-            setEvents(dbEvents.map(convertDBEventToUI));
-          }
-          
-          const target = await getDailyTarget(tempUserId);
-          if (target) {
-            setDailyTarget({
-              water_ml: target.water_ml,
-              protein_g: target.protein_g,
-              sodium_mg: target.sodium_mg,
-              potassium_mg: target.potassium_mg,
-            });
-          }
+          // Log error and show toast notification if hydration gap calculation fails
+          console.error('Failed to calculate hydration gaps. Make sure you are logged in and database tables are set up correctly.');
+          toast({
+            title: "Error",
+            description: "Failed to load hydration data. Please try again later.",
+            variant: "destructive"
+          });
+          setIsLoading(false);
+          return;
         }
       } catch (error) {
         console.error("Error loading user data:", error);
@@ -785,44 +796,18 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {/* Timeline */}
-          <div className="relative pl-6 border-l-2 border-cyan-400/30 space-y-4">
-            {events.map((event) => (
-              <motion.div
-                key={event.id}
-                className="relative"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-              >
-                <div
-                  className="absolute -left-8 mt-1 h-4 w-4 rounded-full border-2 flex items-center justify-center"
-                  style={{
-                    backgroundColor: getEventColor(event.type),
-                    borderColor: getEventColor(event.type),
-                    boxShadow: `0 0 10px ${getEventColor(event.type)}60`,
-                  }}
-                >
-                  {getEventIcon(event.type)}
+          {/* Hydration Timeline */}
+          <Card className="bg-slate-700/30 border-cyan-400/20 overflow-hidden">
+            <CardContent className="p-0">
+              {user && user.id ? (
+                <HydrationTimeline userId={user.id} />
+              ) : (
+                <div className="flex items-center justify-center p-6 text-red-400">
+                  <p>Error: User not logged in. Please log in to view your hydration timeline.</p>
                 </div>
-                <div className="mb-1 text-xs opacity-70">{event.time}</div>
-                <Card className="p-3 bg-slate-700/50 border-cyan-400/20">
-                  <div className="text-sm font-medium" style={{ color: getEventColor(event.type) }}>
-                    {event.description}
-                  </div>
-                  {event.amount && (
-                    <div className="text-xs opacity-70 mt-1">
-                      {event.amount}
-                      {event.type === "protein" ? "g" : "ml"}
-                    </div>
-                  )}
-                  {event.preWeight && event.postWeight && (
-                    <div className="text-xs opacity-70 mt-1">
-                      Sweat loss: {Math.round((event.preWeight - event.postWeight) * 1000)}ml
-                    </div>
-                  )}
-                </Card>
-              </motion.div>
-            ))}
+              )}
+            </CardContent>
+          </Card>
 
             {/* Orders in timeline */}
             {orders.map((order) => (

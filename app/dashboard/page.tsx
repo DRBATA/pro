@@ -144,7 +144,7 @@ export default function Dashboard() {
   
   // Load user data on component mount
   useEffect(() => {
-    if (!user || !user.id) return;
+    if (!user) return;
     
     async function loadUserData() {      
       setIsLoading(true);
@@ -469,7 +469,11 @@ export default function Dashboard() {
           {/* HydrationTimeline component - integrates with the user auth */}
           <Card className="bg-slate-800/50 border-slate-600 shadow-inner shadow-cyan-900/10 mb-4">
             <CardContent className="p-0">
-              {user && user.id ? (
+              {isLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <div className="w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : user && user.id ? (
                 <HydrationTimeline userId={user.id} />
               ) : (
                 <div className="flex items-center justify-center p-6 text-red-400">

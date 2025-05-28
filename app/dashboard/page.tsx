@@ -101,8 +101,10 @@ export default function Dashboard() {
   const [userProfile, setUserProfile] = useState<{
     weight: number;
     sex: 'male' | 'female';
-    bodyType: BodyType;
     name?: string;
+    bodyType?: string;
+    doWeightTraining?: boolean;
+    doIntenseActivity?: boolean;
   }>({
     weight: 70,
     sex: 'male' as 'male' | 'female',
@@ -827,6 +829,37 @@ export default function Dashboard() {
                     <div className="text-sm text-slate-400">
                       Based on your {userProfile.weight}kg {userProfile.bodyType} build
                     </div>
+                    
+                    {/* Kombucha recommendation */}
+                    <div className="mt-4 p-3 bg-slate-700/50 rounded-md border border-purple-400/20">
+                      <div className="text-base font-medium mb-1" style={{ color: "#9D8DF1" }}>
+                        Weekly Kombucha Plan
+                      </div>
+                      <div className="text-sm text-slate-300">
+                        {userProfile.doWeightTraining && userProfile.doIntenseActivity ? (
+                          <>
+                            <span className="font-bold">4 servings per week</span> recommended for optimal recovery
+                            <div className="text-xs text-slate-400 mt-1">
+                              For high-intensity training and muscle building needs
+                            </div>
+                          </>
+                        ) : userProfile.doWeightTraining || userProfile.doIntenseActivity ? (
+                          <>
+                            <span className="font-bold">3 servings per week</span> recommended for recovery support
+                            <div className="text-xs text-slate-400 mt-1">
+                              To support your {userProfile.doWeightTraining ? "muscle building" : "intense training"} regimen
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-bold">2 servings per week</span> recommended for maintenance
+                            <div className="text-xs text-slate-400 mt-1">
+                              For general hydration and wellness support
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -980,6 +1013,36 @@ export default function Dashboard() {
                 value={userProfile.weight}
                 onChange={(e) => setUserProfile({ ...userProfile, weight: Number(e.target.value) })}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-cyan-400 mb-2 block">Activity Profile</Label>
+              <div className="space-y-3 pl-1">
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="weightTraining"
+                    className="h-4 w-4 mr-3 accent-cyan-400"
+                    checked={userProfile.doWeightTraining || false}
+                    onChange={(e) => setUserProfile({ ...userProfile, doWeightTraining: e.target.checked })}
+                  />
+                  <Label htmlFor="weightTraining" className="text-slate-100 cursor-pointer">
+                    Muscle Building / Weight Training
+                  </Label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="intenseActivity"
+                    className="h-4 w-4 mr-3 accent-cyan-400"
+                    checked={userProfile.doIntenseActivity || false}
+                    onChange={(e) => setUserProfile({ ...userProfile, doIntenseActivity: e.target.checked })}
+                  />
+                  <Label htmlFor="intenseActivity" className="text-slate-100 cursor-pointer">
+                    HIIT / Hot Yoga / Outdoor Training
+                  </Label>
+                </div>
+              </div>
             </div>
           </div>
           <Button

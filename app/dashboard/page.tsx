@@ -944,63 +944,35 @@ export default function Dashboard() {
             <div className="space-y-2">
               <Label className="text-cyan-400">Body Type</Label>
               {userProfile.sex === 'male' ? (
-                <Tabs
-                  value={userProfile.bodyType}
-                  onValueChange={(value) =>
-                    setUserProfile({ ...userProfile, bodyType: value as BodyType })
-                  }
-                  className="w-full"
-                >
-                  <TabsList className="grid grid-cols-3 w-full bg-slate-700 h-auto p-1 gap-1">
-                    <TabsTrigger
-                      value="muscular"
-                      className="data-[state=active]:bg-green-400/20 data-[state=active]:text-green-300 py-2"
+                <div className="grid grid-cols-3 w-full gap-2 mt-1">
+                  {[['muscular', 'Muscular', 'green'], ['athletic', 'Athletic', 'cyan'], ['stocky', 'Stocky', 'pink']].map(([value, label, color]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setUserProfile({ ...userProfile, bodyType: value as BodyType })}
+                      className={`py-2 px-1 rounded-md border ${userProfile.bodyType === value 
+                        ? `bg-${color}-400/20 text-${color}-300 border-${color}-400/40` 
+                        : 'bg-slate-700/50 text-slate-300 border-slate-600/40'}`}
                     >
-                      Muscular
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="athletic"
-                      className="data-[state=active]:bg-cyan-400/20 data-[state=active]:text-cyan-300 py-2"
-                    >
-                      Athletic
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="stocky"
-                      className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300 py-2"
-                    >
-                      Stocky
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
+                      {label}
+                    </button>
+                  ))}
+                </div>
               ) : (
-                <Tabs
-                  value={userProfile.bodyType}
-                  onValueChange={(value) =>
-                    setUserProfile({ ...userProfile, bodyType: value as BodyType })
-                  }
-                  className="w-full"
-                >
-                  <TabsList className="grid grid-cols-3 w-full bg-slate-700 h-auto p-1 gap-1">
-                    <TabsTrigger
-                      value="toned"
-                      className="data-[state=active]:bg-green-400/20 data-[state=active]:text-green-300 py-2"
+                <div className="grid grid-cols-3 w-full gap-2 mt-1">
+                  {[['toned', 'Toned', 'green'], ['athletic_female', 'Athletic', 'cyan'], ['curvy', 'Curvy', 'pink']].map(([value, label, color]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setUserProfile({ ...userProfile, bodyType: value as BodyType })}
+                      className={`py-2 px-1 rounded-md border ${userProfile.bodyType === value 
+                        ? `bg-${color}-400/20 text-${color}-300 border-${color}-400/40` 
+                        : 'bg-slate-700/50 text-slate-300 border-slate-600/40'}`}
                     >
-                      Toned
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="athletic_female"
-                      className="data-[state=active]:bg-cyan-400/20 data-[state=active]:text-cyan-300 py-2"
-                    >
-                      Athletic
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="curvy"
-                      className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300 py-2"
-                    >
-                      Curvy
-                    </TabsTrigger>
-                  </TabsList>
-                </Tabs>
+                      {label}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
 

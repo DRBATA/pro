@@ -48,47 +48,107 @@ export function LoginForm() {
     setError(null)
     
     try {
+      console.log('Starting login process...')
+      
+      // Clear any existing auth data to prevent conflicts
+      if (typeof window !== 'undefined') {
+        // Clear Supabase auth data
+        localStorage.removeItem('supabase.auth.token')
+        localStorage.removeItem('sb-access-token')
+        localStorage.removeItem('sb-refresh-token')
+        
+        // Clear any magic link data
+        localStorage.removeItem('supabase.auth.magic_link')
+        
+        // Clear our custom auth data
+        localStorage.removeItem('userLoggedIn')
+        localStorage.removeItem('userIsStaff')
+        
+        console.log('Cleared existing auth data')
+      }
+      
       // Direct login using Supabase client to bypass any middleware issues
-      const { data: authData, error } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
-      })
+      const { data: authData, error } = await Promise.race([
+        supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
+        }),
+        // Add a timeout to prevent infinite waiting
+        new Promise<{data: null, error: any}>((resolve) => 
+          setTimeout(() => resolve({data: null, error: {message: 'Login timed out. Please try again.'}}), 15000)
+        )
+      ])
 
       if (error) {
         console.error('Login error:', error)
         setError(error.message)
+        setIsLoading(false)
         return
       }
 
       console.log('Login successful:', authData)
       
-      // Fetch user profile
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', data.email)
-        .single()
-        
-      if (userError && userError.code !== 'PGRST116') {
-        console.error('User fetch error:', userError)
-        setError(userError.message)
-        return
-      }
-
-      // Login successful
-      setLoginSuccess(true)
-      setUserData({ isStaff: userData?.is_staff || false })
-      
-      // Store user data in local storage for persistence
+      // Store authentication in localStorage immediately
       if (typeof window !== 'undefined') {
         localStorage.setItem('userLoggedIn', 'true')
-        localStorage.setItem('userIsStaff', userData?.is_staff ? 'true' : 'false')
       }
       
-      // Auto-redirect after 1 second
-      setTimeout(() => {
-        router.push(userData?.is_staff ? '/staff' : '/dashboard')
-      }, 1000)
+      // Fetch user profile
+      try {
+        const { data: userData, error: userError } = await Promise.race([
+          supabase
+            .from('users')
+            .select('*')
+            .eq('email', data.email)
+            .single(),
+          // Add a timeout for profile fetch
+          new Promise<{data: null, error: any}>((resolve) => 
+            setTimeout(() => resolve({data: null, error: {message: 'Profile fetch timed out'}}), 10000)
+          )
+        ])
+          
+        if (userError && userError.code !== 'PGRST116') {
+          console.error('User fetch error:', userError)
+          // Don't block login if profile fetch fails
+          console.warn('Continuing with login despite profile fetch error')
+        }
+
+        // Login successful
+        setLoginSuccess(true)
+        setUserData({ isStaff: false }) // Simplified - we don't need staff functionality
+        
+        // Store user data in local storage for persistence
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('userIsStaff', 'false') // Default to regular user
+        }
+      } catch (profileError) {
+        console.error('Profile fetch error:', profileError)
+        // Continue with login even if profile fetch fails
+      }
+      
+      console.log('Redirecting to dashboard...')
+      
+      // Handle redirection - try both methods for redundancy
+      try {
+        // Method 1: Use setTimeout for redirection
+        setTimeout(() => {
+          const redirectPath = '/dashboard' // Always go to dashboard, no staff path
+          console.log(`Redirecting to ${redirectPath}...`)
+          router.push(redirectPath)
+        }, 1000)
+        
+        // Method 2: Direct redirection as backup
+        setTimeout(() => {
+          if (document.location.pathname.includes('/login')) {
+            console.log('Fallback redirection activated')
+            document.location.href = '/dashboard'
+          }
+        }, 3000)
+      } catch (redirectError) {
+        console.error('Redirection error:', redirectError)
+        // Last resort - direct URL change
+        window.location.href = '/dashboard'
+      }
     } catch (err: any) {
       console.error('Unexpected error:', err)
       setError(err.message || "An unexpected error occurred. Please try again.")

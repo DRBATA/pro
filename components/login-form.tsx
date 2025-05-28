@@ -43,6 +43,46 @@ export function LoginForm() {
     },
   })
 
+  // Aggressive cache and storage clearing function
+  const clearAllBrowserData = async () => {
+    if (typeof window === 'undefined') return;
+    
+    console.log('Performing aggressive cache/storage clearing...');
+    
+    // Clear all localStorage
+    localStorage.clear();
+    
+    // Clear all sessionStorage
+    sessionStorage.clear();
+    
+    // Clear all cookies for this domain
+    document.cookie.split(';').forEach(cookie => {
+      document.cookie = cookie.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
+    });
+    
+    // Clear IndexedDB databases if possible
+    try {
+      const databases = await window.indexedDB.databases();
+      databases.forEach(db => {
+        if (db.name) window.indexedDB.deleteDatabase(db.name);
+      });
+    } catch (e) {
+      console.log('IndexedDB clearing not supported or failed:', e);
+    }
+    
+    // Try to clear cache via Cache API if available
+    try {
+      if ('caches' in window) {
+        const cacheKeys = await caches.keys();
+        await Promise.all(cacheKeys.map(key => caches.delete(key)));
+      }
+    } catch (e) {
+      console.log('Cache API clearing failed:', e);
+    }
+    
+    console.log('All browser storage cleared');
+  };
+  
   async function onSubmit(data: LoginFormValues) {
     setIsLoading(true)
     setError(null)
@@ -50,21 +90,20 @@ export function LoginForm() {
     try {
       console.log('Starting login process...')
       
-      // Clear any existing auth data to prevent conflicts
+      // Aggressively clear all browser data
+      await clearAllBrowserData();
+      
+      // Additional specific Supabase clearing
       if (typeof window !== 'undefined') {
-        // Clear Supabase auth data
+        // Double-check these are cleared (redundant but safe)
         localStorage.removeItem('supabase.auth.token')
         localStorage.removeItem('sb-access-token')
         localStorage.removeItem('sb-refresh-token')
-        
-        // Clear any magic link data
         localStorage.removeItem('supabase.auth.magic_link')
-        
-        // Clear our custom auth data
         localStorage.removeItem('userLoggedIn')
         localStorage.removeItem('userIsStaff')
         
-        console.log('Cleared existing auth data')
+        console.log('Verified Supabase auth data is cleared')
       }
       
       // Direct login using Supabase client to bypass any middleware issues

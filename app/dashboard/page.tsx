@@ -165,27 +165,62 @@ export default function Dashboard() {
   const [sodiumIntake, setSodiumIntake] = useState(0)
   const [potassiumIntake, setPotassiumIntake] = useState(0)
   
+  // Function to calculate lean body mass based on weight, sex, and body type
+  const calculateLBM = (profile: any) => {
+    const weight = profile.weight || 70; // Default to 70kg if not set
+    const sex = profile.sex || 'male';
+    const bodyType = profile.bodyType || 'average';
+    
+    // Body fat percentage based on sex and body type
+    let bodyFatPercentage = 0.25; // Default: 25%
+    
+    if (sex === 'male') {
+      switch(bodyType) {
+        case 'muscular': bodyFatPercentage = 0.15; break; // 15%
+        case 'athletic': bodyFatPercentage = 0.20; break; // 20%
+        case 'stocky': bodyFatPercentage = 0.30; break;   // 30%
+        default: bodyFatPercentage = 0.25;                // 25%
+      }
+    } else { // female
+      switch(bodyType) {
+        case 'toned': bodyFatPercentage = 0.21; break;         // 21%
+        case 'athletic_female': bodyFatPercentage = 0.24; break; // 24%
+        case 'curvy': bodyFatPercentage = 0.32; break;         // 32%
+        default: bodyFatPercentage = 0.27;                    // 27%
+      }
+    }
+    
+    // Calculate LBM: weight × (1 - body fat percentage)
+    const lbm = weight * (1 - bodyFatPercentage);
+    console.log(`LBM calculated: ${lbm}kg (${bodyFatPercentage * 100}% body fat)`);  
+    return lbm;
+  };
+
   // Function to calculate hydration targets based on user profile
   const calculateHydrationTargets = (profile: any) => {
     try {
       console.log('Calculating user daily hydration summary:', profile);
       
       const weight = profile.weight || 70; // Default to 70kg if not set
-      const sex = profile.sex || 'male';
-      const bodyType = profile.bodyType || 'average';
       
-      // Base calculations
-      const baseWaterPerKg = sex === 'male' ? 35 : 31;
-      const recommendedWater = weight * baseWaterPerKg;
+      // Calculate LBM and water needs based on LBM
+      const lbm = calculateLBM(profile);
+      const waterPerKgOfLBM = 30; // 30ml per kg of lean body mass
+      const recommendedWater = lbm * waterPerKgOfLBM;
       
-      // Activity multiplier (assuming light activity)
-      const activityMultiplier = 1.2;
+      // Activity multiplier based on activity profile
+      let activityMultiplier = 1.0; // Base multiplier
+      if (profile.doWeightTraining) activityMultiplier += 0.1;
+      if (profile.doIntenseActivity) activityMultiplier += 0.1;
+      
       const adjustedWater = recommendedWater * activityMultiplier;
+      
+      // Protein calculation based on weight
+      const baseProtein = weight * 0.8; // 0.8g per kg of total weight
       
       // Electrolyte calculations (simplified)
       const baseSodium = 1500; // mg per day
       const basePotassium = 2500; // mg per day
-      const baseProtein = weight * 0.8; // 0.8g per kg
       
       // Update state with calculated values
       setWaterIntake(0); // Current intake (from timeline data)
@@ -194,7 +229,16 @@ export default function Dashboard() {
       setSodiumIntake(Math.round(baseSodium)); // Target
       setPotassiumIntake(Math.round(basePotassium)); // Target
       
+      // Update daily target state for UI display
+      setDailyTarget({
+        water_ml: Math.round(adjustedWater),
+        protein_g: Math.round(baseProtein),
+        sodium_mg: Math.round(baseSodium),
+        potassium_mg: Math.round(basePotassium)
+      });
+      
       console.log('Hydration targets calculated:', {
+        lbm: Math.round(lbm),
         water: Math.round(adjustedWater),
         protein: Math.round(baseProtein),
         sodium: Math.round(baseSodium),
@@ -205,6 +249,51 @@ export default function Dashboard() {
     }
   }
 
+  // Function to handle profile updates
+  const handleUpdateProfile = async () => {
+    try {
+      // Show loading state
+      setIsLoading(true);
+      
+      // Save profile to database if user is logged in
+      if (sessionEmail) {
+        await supabase
+          .from('users')
+          .update({
+            weight: userProfile.weight,
+            sex: userProfile.sex,
+            body_type: userProfile.bodyType,
+            do_weight_training: userProfile.doWeightTraining || false,
+            do_intense_activity: userProfile.doIntenseActivity || false
+          })
+          .eq('email', sessionEmail);
+          
+        console.log('Profile updated in database:', userProfile);
+      }
+      
+      // Recalculate hydration targets based on updated profile
+      calculateHydrationTargets(userProfile);
+      
+      // Close the profile modal
+      setShowProfileModal(false);
+      
+      // Show success toast
+      toast({
+        title: "Profile Updated",
+        description: "Your profile has been updated and hydration targets recalculated."
+      });
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      toast({
+        title: "Update Failed",
+        description: "There was an error updating your profile.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   // Get session data directly from Supabase (best practice)
   useEffect(() => {
     // Function to get session data and load user profile
@@ -1016,7 +1105,7 @@ export default function Dashboard() {
             </div>
           </div>
           <Button
-            onClick={updateProfile}
+            onClick={handleUpdateProfile}
             className="bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30"
             style={{ color: "#00FFFF" }}
           >

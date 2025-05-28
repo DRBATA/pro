@@ -203,46 +203,69 @@ export default function Dashboard() {
       
       const weight = profile.weight || 70; // Default to 70kg if not set
       
-      // Calculate LBM and water needs based on LBM
+      // Calculate LBM and baseline water needs
       const lbm = calculateLBM(profile);
       const waterPerKgOfLBM = 30; // 30ml per kg of lean body mass
-      const recommendedWater = lbm * waterPerKgOfLBM;
+      const baseWater = lbm * waterPerKgOfLBM;
       
-      // Activity multiplier based on activity profile
-      let activityMultiplier = 1.0; // Base multiplier
-      if (profile.doWeightTraining) activityMultiplier += 0.1;
-      if (profile.doIntenseActivity) activityMultiplier += 0.1;
+      // Baseline sodium calculation (24mg/kg of LBM)
+      const sodiumRateMgPerKg = 24;
+      const baseSodium = lbm * sodiumRateMgPerKg;
       
-      const adjustedWater = recommendedWater * activityMultiplier;
+      // Add activity-based water and sodium losses
+      let additionalWater = 0;
+      let additionalSodium = 0;
+      
+      // Assume 1 hour of activity per day as a simplification
+      // In a full implementation, this would come from the timeline
+      const activityHoursPerDay = 1;
+      
+      if (profile.doIntenseActivity) {
+        // High intensity activity (HIIT/hot yoga)
+        additionalWater = 1300 * activityHoursPerDay; // 1.3L per hour converted to ml
+        additionalSodium = 800 * activityHoursPerDay; // 800mg per hour
+      } else if (profile.doWeightTraining) {
+        // Moderate activity (gym/swim/normal yoga)
+        additionalWater = 600 * activityHoursPerDay; // 0.6L per hour converted to ml
+        additionalSodium = 420 * activityHoursPerDay; // 420mg per hour
+      }
+      
+      // Total water and sodium needs
+      const totalWater = baseWater + additionalWater;
+      const totalSodium = baseSodium + additionalSodium;
+      
+      // Potassium ratio depends on activity type
+      let potassiumMultiplier = 3; // Default for moderate or no activity
+      if (profile.doIntenseActivity) {
+        potassiumMultiplier = 2; // Ratio shifts for heavy sweating activities
+      }
+      
+      const totalPotassium = totalSodium * potassiumMultiplier;
       
       // Protein calculation based on weight
       const baseProtein = weight * 0.8; // 0.8g per kg of total weight
       
-      // Electrolyte calculations (simplified)
-      const baseSodium = 1500; // mg per day
-      const basePotassium = 2500; // mg per day
-      
       // Update state with calculated values
       setWaterIntake(0); // Current intake (from timeline data)
-      setWaterRemaining(Math.round(adjustedWater)); // Target
+      setWaterRemaining(Math.round(totalWater)); // Target
       setProteinIntake(Math.round(baseProtein)); // Target
-      setSodiumIntake(Math.round(baseSodium)); // Target
-      setPotassiumIntake(Math.round(basePotassium)); // Target
+      setSodiumIntake(Math.round(totalSodium)); // Target
+      setPotassiumIntake(Math.round(totalPotassium)); // Target
       
       // Update daily target state for UI display
       setDailyTarget({
-        water_ml: Math.round(adjustedWater),
+        water_ml: Math.round(totalWater),
         protein_g: Math.round(baseProtein),
-        sodium_mg: Math.round(baseSodium),
-        potassium_mg: Math.round(basePotassium)
+        sodium_mg: Math.round(totalSodium),
+        potassium_mg: Math.round(totalPotassium)
       });
       
       console.log('Hydration targets calculated:', {
         lbm: Math.round(lbm),
-        water: Math.round(adjustedWater),
+        water: Math.round(totalWater),
         protein: Math.round(baseProtein),
-        sodium: Math.round(baseSodium),
-        potassium: Math.round(basePotassium)
+        sodium: Math.round(totalSodium),
+        potassium: Math.round(totalPotassium)
       });
     } catch (error) {
       console.error('Error calculating hydration targets:', error);

@@ -242,8 +242,13 @@ export default function Dashboard() {
       
       const totalPotassium = totalSodium * potassiumMultiplier;
       
-      // Protein calculation based on weight
-      const baseProtein = weight * 0.8; // 0.8g per kg of total weight
+      // Protein calculation based on LBM and training intensity
+      // Heavy training: 1.8g/kg LBM, Maintenance: 1.3g/kg LBM
+      const proteinRatePerKg = profile.doWeightTraining ? 1.8 : 1.3;
+      const baseProtein = lbm * proteinRatePerKg;
+      
+      // Note: Additional water for protein metabolism (4mL/g) will be added
+      // when protein intake is logged on the timeline
       
       // Update state with calculated values
       setWaterIntake(0); // Current intake (from timeline data)

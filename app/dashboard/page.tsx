@@ -212,27 +212,17 @@ export default function Dashboard() {
       const sodiumRateMgPerKg = 24;
       const baseSodium = lbm * sodiumRateMgPerKg;
       
-      // Add activity-based water and sodium losses
-      let additionalWater = 0;
-      let additionalSodium = 0;
+      // NOTE: Activity-based water and sodium losses will be tracked in the timeline
+      // This is just the baseline calculation for now
       
-      // Assume 1 hour of activity per day as a simplification
-      // In a full implementation, this would come from the timeline
-      const activityHoursPerDay = 1;
+      // For baseline calculation, we don't add activity water/sodium
+      // These will be added when activities are logged in the timeline
+      const totalWater = baseWater;
+      const totalSodium = baseSodium;
       
-      if (profile.doIntenseActivity) {
-        // High intensity activity (HIIT/hot yoga)
-        additionalWater = 1300 * activityHoursPerDay; // 1.3L per hour converted to ml
-        additionalSodium = 800 * activityHoursPerDay; // 800mg per hour
-      } else if (profile.doWeightTraining) {
-        // Moderate activity (gym/swim/normal yoga)
-        additionalWater = 600 * activityHoursPerDay; // 0.6L per hour converted to ml
-        additionalSodium = 420 * activityHoursPerDay; // 420mg per hour
-      }
-      
-      // Total water and sodium needs
-      const totalWater = baseWater + additionalWater;
-      const totalSodium = baseSodium + additionalSodium;
+      // REFERENCE FOR TIMELINE IMPLEMENTATION:
+      // High intensity activity (HIIT/hot yoga): +1300ml water, +800mg sodium per hour
+      // Moderate activity (gym/swim/normal yoga): +600ml water, +420mg sodium per hour
       
       // Potassium ratio depends on activity type
       let potassiumMultiplier = 3; // Default for moderate or no activity
@@ -279,28 +269,42 @@ export default function Dashboard() {
 
   // Function to handle profile updates
   const handleUpdateProfile = async () => {
+    // Prevent multiple simultaneous update attempts
+    if (isLoading) {
+      console.log('Update already in progress, please wait...');
+      return;
+    }
+    
     try {
       // Show loading state
       setIsLoading(true);
       
+      // Create a local copy of the profile to prevent race conditions
+      const profileToUpdate = { ...userProfile };
+      
       // Save profile to database if user is logged in
       if (sessionEmail) {
-        await supabase
+        const { error } = await supabase
           .from('users')
           .update({
-            weight: userProfile.weight,
-            sex: userProfile.sex,
-            body_type: userProfile.bodyType,
-            do_weight_training: userProfile.doWeightTraining || false,
-            do_intense_activity: userProfile.doIntenseActivity || false
+            weight: profileToUpdate.weight,
+            sex: profileToUpdate.sex,
+            body_type: profileToUpdate.bodyType,
+            do_weight_training: profileToUpdate.doWeightTraining === true,
+            do_intense_activity: profileToUpdate.doIntenseActivity === true
           })
           .eq('email', sessionEmail);
           
-        console.log('Profile updated in database:', userProfile);
+        if (error) {
+          throw new Error(`Database update failed: ${error.message}`);
+        }
+          
+        console.log('Profile updated in database:', profileToUpdate);
       }
       
       // Recalculate hydration targets based on updated profile
-      calculateHydrationTargets(userProfile);
+      // Wait for this to complete to ensure state is updated
+      calculateHydrationTargets(profileToUpdate);
       
       // Close the profile modal
       setShowProfileModal(false);
@@ -314,11 +318,12 @@ export default function Dashboard() {
       console.error('Error updating profile:', error);
       toast({
         title: "Update Failed",
-        description: "There was an error updating your profile.",
+        description: "There was an error updating your profile. Please try again.",
         variant: "destructive"
       });
     } finally {
-      setIsLoading(false);
+      // Ensure loading state is always reset
+      setTimeout(() => setIsLoading(false), 500);
     }
   };
   
@@ -1111,7 +1116,10 @@ export default function Dashboard() {
                     id="weightTraining"
                     className="h-4 w-4 mr-3 accent-cyan-400"
                     checked={userProfile.doWeightTraining || false}
-                    onChange={(e) => setUserProfile({ ...userProfile, doWeightTraining: e.target.checked })}
+                    onChange={(e) => {
+                      console.log('Weight training checkbox changed to:', e.target.checked);
+                      setUserProfile({ ...userProfile, doWeightTraining: e.target.checked });
+                    }}
                   />
                   <Label htmlFor="weightTraining" className="text-slate-100 cursor-pointer">
                     Muscle Building / Weight Training
@@ -1123,7 +1131,10 @@ export default function Dashboard() {
                     id="intenseActivity"
                     className="h-4 w-4 mr-3 accent-cyan-400"
                     checked={userProfile.doIntenseActivity || false}
-                    onChange={(e) => setUserProfile({ ...userProfile, doIntenseActivity: e.target.checked })}
+                    onChange={(e) => {
+                      console.log('Intense activity checkbox changed to:', e.target.checked);
+                      setUserProfile({ ...userProfile, doIntenseActivity: e.target.checked });
+                    }}
                   />
                   <Label htmlFor="intenseActivity" className="text-slate-100 cursor-pointer">
                     HIIT / Hot Yoga / Outdoor Training

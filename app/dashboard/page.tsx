@@ -917,28 +917,26 @@ export default function Dashboard() {
           <div className="py-4 space-y-6">
             <div className="space-y-2">
               <Label className="text-cyan-400">Biological Sex</Label>
-              <Tabs
-                value={userProfile.sex}
-                onValueChange={(value) =>
-                  setUserProfile({ ...userProfile, sex: value as 'male' | 'female' })
-                }
-                className="w-full"
-              >
-                <TabsList className="grid grid-cols-2 w-full bg-slate-700">
-                  <TabsTrigger
-                    value="male"
-                    className="data-[state=active]:bg-blue-400/20 data-[state=active]:text-blue-300"
-                  >
-                    Male
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="female"
-                    className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300"
-                  >
-                    Female
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <div className="grid grid-cols-2 w-full gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => setUserProfile({ ...userProfile, sex: 'male' })}
+                  className={`py-2 px-1 rounded-md border ${userProfile.sex === 'male' 
+                    ? 'bg-blue-400/20 text-blue-300 border-blue-400/40' 
+                    : 'bg-slate-700/50 text-slate-300 border-slate-600/40'}`}
+                >
+                  Male
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUserProfile({ ...userProfile, sex: 'female' })}
+                  className={`py-2 px-1 rounded-md border ${userProfile.sex === 'female' 
+                    ? 'bg-pink-400/20 text-pink-300 border-pink-400/40' 
+                    : 'bg-slate-700/50 text-slate-300 border-slate-600/40'}`}
+                >
+                  Female
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2">

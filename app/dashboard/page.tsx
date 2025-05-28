@@ -877,7 +877,7 @@ export default function Dashboard() {
 
       {/* Profile Modal */}
       <Dialog open={showProfileModal} onOpenChange={setShowProfileModal}>
-        <DialogContent className="bg-slate-800 border-cyan-400/30">
+        <DialogContent className="bg-slate-800 border-cyan-400/30 sm:max-w-[500px] w-[95vw]">
           <DialogHeader>
             <DialogTitle style={{ color: "#00FFFF" }}>Update Profile</DialogTitle>
           </DialogHeader>
@@ -918,22 +918,22 @@ export default function Dashboard() {
                   }
                   className="w-full"
                 >
-                  <TabsList className="grid grid-cols-3 w-full bg-slate-700">
+                  <TabsList className="grid grid-cols-3 w-full bg-slate-700 h-auto p-1 gap-1">
                     <TabsTrigger
                       value="muscular"
-                      className="data-[state=active]:bg-green-400/20 data-[state=active]:text-green-300"
+                      className="data-[state=active]:bg-green-400/20 data-[state=active]:text-green-300 py-2"
                     >
                       Muscular
                     </TabsTrigger>
                     <TabsTrigger
                       value="athletic"
-                      className="data-[state=active]:bg-cyan-400/20 data-[state=active]:text-cyan-300"
+                      className="data-[state=active]:bg-cyan-400/20 data-[state=active]:text-cyan-300 py-2"
                     >
                       Athletic
                     </TabsTrigger>
                     <TabsTrigger
                       value="stocky"
-                      className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300"
+                      className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300 py-2"
                     >
                       Stocky
                     </TabsTrigger>
@@ -947,22 +947,22 @@ export default function Dashboard() {
                   }
                   className="w-full"
                 >
-                  <TabsList className="grid grid-cols-3 w-full bg-slate-700">
+                  <TabsList className="grid grid-cols-3 w-full bg-slate-700 h-auto p-1 gap-1">
                     <TabsTrigger
                       value="toned"
-                      className="data-[state=active]:bg-green-400/20 data-[state=active]:text-green-300"
+                      className="data-[state=active]:bg-green-400/20 data-[state=active]:text-green-300 py-2"
                     >
                       Toned
                     </TabsTrigger>
                     <TabsTrigger
                       value="athletic_female"
-                      className="data-[state=active]:bg-cyan-400/20 data-[state=active]:text-cyan-300"
+                      className="data-[state=active]:bg-cyan-400/20 data-[state=active]:text-cyan-300 py-2"
                     >
                       Athletic
                     </TabsTrigger>
                     <TabsTrigger
                       value="curvy"
-                      className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300"
+                      className="data-[state=active]:bg-pink-400/20 data-[state=active]:text-pink-300 py-2"
                     >
                       Curvy
                     </TabsTrigger>

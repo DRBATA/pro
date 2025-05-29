@@ -212,7 +212,7 @@ function Dashboard() {
   // Input library state for the modal
   const [libraryItems, setLibraryItems] = useState<any[]>([])
   const [filteredItems, setFilteredItems] = useState<any[]>([])
-  const [selectedCategory, setSelectedCategory] = useState<'drink' | 'food' | 'activity'>('drink')
+  const [selectedCategory, setSelectedCategory] = useState<'drink' | 'food' | 'alcohol' | 'supplement' | 'exercise' | 'state'>('drink')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedLibraryItem, setSelectedLibraryItem] = useState<any>(null)
   
@@ -259,7 +259,7 @@ function Dashboard() {
   };
 
   // Function to load input library items
-  const loadLibraryItems = async (category: 'drink' | 'food' | 'activity') => {
+  const loadLibraryItems = async (category: 'drink' | 'food' | 'alcohol' | 'supplement' | 'exercise' | 'state') => {
     try {
       const items = await getInputLibraryItems(category);
       setLibraryItems(items);
@@ -1075,8 +1075,8 @@ function Dashboard() {
                     <Select
                       value={selectedCategory}
                       onValueChange={(value) => {
-                        setSelectedCategory(value as 'drink' | 'food' | 'activity');
-                        loadLibraryItems(value as 'drink' | 'food' | 'activity');
+                        setSelectedCategory(value as any);
+                        loadLibraryItems(value as any);
                       }}
                     >
                       <SelectTrigger 
@@ -1085,9 +1085,12 @@ function Dashboard() {
                         <SelectValue placeholder="Select a category" />
                       </SelectTrigger>
                       <SelectContent className="bg-slate-800 border-cyan-400/50 text-white">
-                        <SelectItem value="drink" className="focus:bg-cyan-400/20 focus:text-white">Drinks</SelectItem>
+                        <SelectItem value="drink" className="focus:bg-cyan-400/20 focus:text-white">Drink</SelectItem>
                         <SelectItem value="food" className="focus:bg-cyan-400/20 focus:text-white">Food</SelectItem>
-                        <SelectItem value="activity" className="focus:bg-cyan-400/20 focus:text-white">Activities</SelectItem>
+                        <SelectItem value="alcohol" className="focus:bg-cyan-400/20 focus:text-white">Alcohol</SelectItem>
+                        <SelectItem value="supplement" className="focus:bg-cyan-400/20 focus:text-white">Supplement</SelectItem>
+                        <SelectItem value="exercise" className="focus:bg-cyan-400/20 focus:text-white">Exercise</SelectItem>
+                        <SelectItem value="state" className="focus:bg-cyan-400/20 focus:text-white">State</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

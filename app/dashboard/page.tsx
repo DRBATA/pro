@@ -1062,7 +1062,8 @@ function Dashboard() {
                     <Label className="text-right text-cyan-400">Time</Label>
                     <Input
                       type="time"
-                      className="col-span-3 bg-slate-700 border-cyan-400/30"
+                      className="col-span-3 bg-slate-700 border-cyan-400/50 text-white"
+                      style={{ color: "white", caretColor: "#00FFFF" }}
                       value={newEvent.time}
                       onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })}
                     />

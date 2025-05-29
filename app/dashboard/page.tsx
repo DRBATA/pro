@@ -917,14 +917,22 @@ function Dashboard() {
     try {
       setIsLoadingRecommendation(true);
       
-      // Call our API endpoint
+      // Call our API endpoint with our already calculated hydration values
       const response = await fetch('/api/recommend/gpt', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: user.id
+          userId: user.id,
+          hydrationData: {
+            currentWaterIntake: waterIntake, 
+            targetWaterIntake: waterRemaining,
+            proteinIntake: proteinIntake,
+            sodiumIntake: sodiumIntake,
+            potassiumIntake: potassiumIntake,
+            userProfile: userProfile
+          }
         })
       });
 

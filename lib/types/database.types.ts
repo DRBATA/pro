@@ -6,6 +6,9 @@ export type HydrationEvent = Database['public']['Tables']['hydration_events']['R
 export type DailyTarget = Database['public']['Tables']['daily_targets']['Row'];
 export type HydrationKit = Database['public']['Tables']['hydration_kits']['Row'];
 export type Order = Database['public']['Tables']['orders']['Row'];
+export type TimelineEvent = Database['public']['Tables']['timeline_events']['Row'];
+export type Product = Database['public']['Tables']['products']['Row'];
+export type InputLibraryItem = Database['public']['Tables']['input_library']['Row'];
 
 export interface Database {
   public: {
@@ -51,6 +54,99 @@ export interface Database {
       
 
       
+      // New tables for timeline and hydration tracking
+      timeline_events: {
+        Row: {
+          id: string
+          user_id: string
+          session_id: string
+          event_type: 'food' | 'drink' | 'activity'
+          event_time: string
+          input_item_id?: string
+          quantity: number
+          duration_minutes?: number
+          environmental_temp?: number
+          environmental_humidity?: number
+          notes?: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          session_id: string
+          event_type: 'food' | 'drink' | 'activity'
+          event_time: string
+          input_item_id?: string
+          quantity: number
+          duration_minutes?: number
+          environmental_temp?: number
+          environmental_humidity?: number
+          notes?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          session_id?: string
+          event_type?: 'food' | 'drink' | 'activity'
+          event_time?: string
+          input_item_id?: string
+          quantity?: number
+          duration_minutes?: number
+          environmental_temp?: number
+          environmental_humidity?: number
+          notes?: string
+          created_at?: string
+        }
+      }
+
+      // Input library definition moved to the existing one below
+
+      products: {
+        Row: {
+          id: string
+          name: string
+          description?: string
+          price: number
+          image_url?: string
+          water_content?: number
+          sodium?: number
+          potassium?: number
+          magnesium?: number
+          calcium?: number
+          category: 'water' | 'electrolyte' | 'supplement' | 'equipment'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string
+          price: number
+          image_url?: string
+          water_content?: number
+          sodium?: number
+          potassium?: number
+          magnesium?: number
+          calcium?: number
+          category: 'water' | 'electrolyte' | 'supplement' | 'equipment'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string
+          price?: number
+          image_url?: string
+          water_content?: number
+          sodium?: number
+          potassium?: number
+          magnesium?: number
+          calcium?: number
+          category?: 'water' | 'electrolyte' | 'supplement' | 'equipment'
+          created_at?: string
+        }
+      }
+
       // Legacy tables - might be migrated or deprecated
       hydration_events: {
         Row: {
@@ -261,8 +357,13 @@ export interface Database {
         Row: {
           id: string | number
           name: string
-          category: string
+          category: string  // 'food' | 'drink' | 'activity'
           duration_min?: number
+          water_content?: number
+          sodium?: number
+          potassium?: number
+          magnesium?: number
+          calcium?: number
           ivf?: Record<string, any>  // JSON format for compartment data
           isf?: Record<string, any>
           icf?: Record<string, any>
@@ -270,12 +371,18 @@ export interface Database {
           hormones?: Record<string, any>
           description?: string
           protein_g?: number
+          created_at?: string
         }
         Insert: {
           id?: string | number
           name: string
-          category: string
+          category: string  // 'food' | 'drink' | 'activity'
           duration_min?: number
+          water_content?: number
+          sodium?: number
+          potassium?: number
+          magnesium?: number
+          calcium?: number
           ivf?: Record<string, any>
           isf?: Record<string, any>
           icf?: Record<string, any>
@@ -289,6 +396,11 @@ export interface Database {
           name?: string
           category?: string
           duration_min?: number
+          water_content?: number
+          sodium?: number
+          potassium?: number
+          magnesium?: number
+          calcium?: number
           ivf?: Record<string, any>
           isf?: Record<string, any>
           icf?: Record<string, any>
@@ -296,6 +408,7 @@ export interface Database {
           hormones?: Record<string, any>
           description?: string
           protein_g?: number
+          created_at?: string
         }
       }
       

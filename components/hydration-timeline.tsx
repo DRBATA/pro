@@ -13,7 +13,6 @@ import {
   Coffee,
   Utensils
 } from 'lucide-react'
-// DropletHalf is not available, use Droplet as fallback
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from './ui/button'
 import { 
@@ -124,16 +123,16 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
   
   const handleAddHydration = async () => {
     if (!selectedItemId || !activeSession) {
-      console.error('Cannot add hydration event: No selected item or no active session');
-      return;
+      console.error('Cannot add hydration event: No selected item or no active session')
+      return
     }
     
     try {
       // Get the selected item to determine if it's food or drink
-      const selectedItem = libraryItems.find(item => item.id === selectedItemId);
+      const selectedItem = libraryItems.find(item => item.id === selectedItemId)
       if (!selectedItem) {
-        console.error('Selected item not found in library');
-        return;
+        console.error('Selected item not found in library')
+        return
       }
       
       // Add the event to the timeline
@@ -145,23 +144,23 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
         quantity,
         undefined, // No duration for food/drink
         new Date() // Current time
-      );
+      )
       
-      setAddDialogOpen(false);
-      await loadTimelineData();
+      setAddDialogOpen(false)
+      await loadTimelineData()
       
       // Reset form
-      setSelectedItemId('');
-      setQuantity(1);
+      setSelectedItemId('')
+      setQuantity(1)
     } catch (error) {
-      console.error('Failed to add hydration event:', error);
+      console.error('Failed to add hydration event:', error)
     }
   }
   
   const handleAddActivity = async () => {
     if (!activeSession) {
-      console.error('Cannot add activity event: No active session');
-      return;
+      console.error('Cannot add activity event: No active session')
+      return
     }
     
     try {
@@ -177,23 +176,21 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
         activityOutdoor ? activityTemperature : undefined,
         undefined, // No humidity data
         activityType + ' - ' + activityIntensity // Store activity details in notes
-      );
+      )
       
-      setAddDialogOpen(false);
-      await loadTimelineData();
+      setAddDialogOpen(false)
+      await loadTimelineData()
       
       // Reset form
-      setActivityType('walking');
-      setActivityIntensity('moderate');
-      setActivityDuration(30);
-      setActivityOutdoor(false);
-      setActivityTemperature(undefined);
+      setActivityType('walking')
+      setActivityIntensity('moderate')
+      setActivityDuration(30)
+      setActivityOutdoor(false)
+      setActivityTemperature(undefined)
     } catch (error) {
-      console.error('Failed to add activity event:', error);
+      console.error('Failed to add activity event:', error)
     }
   }
-  
-  // We no longer need handleFulfillPlan as we're using a different structure
   
   const getIconForItem = (item: TimelineEvent) => {
     if (item.event_type === 'activity') {
@@ -284,7 +281,7 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
                       <Input
                         id="quantity"
                         type="number"
-                        min="1"
+                        min={1}
                         value={quantity}
                         onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
                         className="w-20 text-center"
@@ -353,32 +350,38 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
                   <div>
                     <Label htmlFor="activityDuration">Duration (minutes)</Label>
                     <div className="flex items-center space-x-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setActivityDuration(prev => Math.max(5, prev - 5))}
+                      >
+                        -
+                      </Button>
                       <Input
                         id="activityDuration"
                         type="number"
-                        min="1"
+                        min={5}
                         value={activityDuration}
                         onChange={(e) => setActivityDuration(parseInt(e.target.value) || 30)}
-                        className="w-20"
+                        className="w-20 text-center"
                       />
-                      <Slider
-                        value={[activityDuration]}
-                        min={5}
-                        max={180}
-                        step={5}
-                        onValueChange={(values) => setActivityDuration(values[0])}
-                        className="flex-1"
-                      />
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setActivityDuration(prev => prev + 5)}
+                      >
+                        +
+                      </Button>
                     </div>
                   </div>
                   
                   <div className="flex items-center space-x-2">
-                    <Switch
-                      id="activityOutdoor"
+                    <Label htmlFor="activityOutdoor">Outdoor Activity</Label>
+                    <Switch 
+                      id="activityOutdoor" 
                       checked={activityOutdoor}
                       onCheckedChange={setActivityOutdoor}
                     />
-                    <Label htmlFor="activityOutdoor">Outdoor Activity</Label>
                   </div>
                   
                   {activityOutdoor && (
@@ -389,8 +392,7 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
                         type="number"
                         value={activityTemperature || ''}
                         onChange={(e) => setActivityTemperature(parseInt(e.target.value) || undefined)}
-                        placeholder="e.g. 30"
-                        className="w-full"
+                        placeholder="Optional"
                       />
                     </div>
                   )}
@@ -476,3 +478,6 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
           </AnimatePresence>
         </div>
       )}
+    </div>
+  )
+}

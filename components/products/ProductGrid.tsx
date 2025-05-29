@@ -30,13 +30,13 @@ type Recommendation = {
 interface ProductGridProps {
   products: Product[]
   recommendations?: Recommendation[]
-  onAddToCart: (product: Product) => void
+  addToCartAction: (product: Product) => void
 }
 
 export default function ProductGrid({
   products,
   recommendations = [],
-  onAddToCart,
+  addToCartAction,
 }: ProductGridProps) {
   // Helper function to check if a product is recommended
   const isRecommended = (productId: string) => {
@@ -106,7 +106,7 @@ export default function ProductGrid({
             
             <CardFooter className="p-4 pt-0">
               <Button 
-                onClick={() => onAddToCart(product)} 
+                onClick={() => addToCartAction(product)} 
                 className="w-full"
               >
                 <Plus className="h-4 w-4 mr-2" /> Add to Order

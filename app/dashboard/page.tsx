@@ -114,25 +114,6 @@ function DashboardWithCart() {
   )
 }
 
-// Cart Component to wrap everything 
-function DashboardWithCart() {
-  const cart = useCart()
-  
-  return (
-    <>
-      <Dashboard />
-      <CartModal 
-        isOpen={cart.isCartOpen}
-        onClose={cart.closeCart}
-        items={cart.items}
-        onUpdateQuantity={cart.updateQuantity}
-        onRemoveItem={cart.removeItem}
-        onClearCart={cart.clearCart}
-      />
-    </>
-  )
-}
-
 // Wrap everything with CartProvider for export
 export default function DashboardPage() {
   return (
@@ -147,7 +128,7 @@ function Dashboard() {
   // Product state
   const [products, setProducts] = useState<any[]>([])
   const [recommendations, setRecommendations] = useState<any[]>([])
-  const { addItem } = useCart()
+  const { addItem, openCart } = useCart()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { user } = useUser() // Use the UserContext for authentication
   const { toast } = useToast()
@@ -1028,9 +1009,9 @@ function Dashboard() {
           <Button
             className="bg-green-400/20 border border-green-400/60 hover:bg-green-400/30 mr-2"
             style={{ color: "#4ADE80" }}
-            onClick={() => useCart().openCart()}
+            onClick={openCart}
           >
-            <ShoppingCart className="h-4 w-4 mr-2" /> Cart {useCart().itemCount > 0 && `(${useCart().itemCount})`}
+            <ShoppingCart className="h-4 w-4 mr-2" /> Cart
           </Button>
           <Button
             className="bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30"
@@ -1307,7 +1288,7 @@ function Dashboard() {
                         <ProductGrid 
                           products={products}
                           recommendations={recommendations}
-                          onAddToCart={handleAddToCart}
+                          addToCartAction={handleAddToCart}
                         />
                       </div>
                     ) : (

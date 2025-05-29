@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { User, Droplets, Eye, EyeOff } from "lucide-react"
@@ -34,6 +34,12 @@ export function LoginForm() {
   const [loginSuccess, setLoginSuccess] = useState(false)
   const [userData, setUserData] = useState<{isStaff: boolean} | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+
+  // Clear all browser data when the login form loads
+  useEffect(() => {
+    clearAllBrowserData();
+    console.log('Login page loaded: cleared all browser data and tokens');
+  }, []);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),

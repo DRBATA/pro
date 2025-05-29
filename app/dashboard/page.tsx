@@ -139,7 +139,23 @@ export default function Dashboard() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [showWelcomeModal, setShowWelcomeModal] = useState(false)
+  const [showSessionModal, setShowSessionModal] = useState(false)
   const [userNickname, setUserNickname] = useState('')
+  
+  // Session state
+  const [sessionConfig, setSessionConfig] = useState({
+    wakeUpTime: '07:00', // Default wake-up time: 7 AM
+    lookbackHours: 4,     // Default lookback period: 4 hours
+    isCreatingSession: false // Loading state for session creation
+  })
+  
+  // Active session state
+  const [activeSession, setActiveSession] = useState<{
+    id: string;
+    startTime: string;
+    dayStartTime: string;
+    wakeUpTime: string;
+  } | null>(null)
   
   // Form state
   const [newEvent, setNewEvent] = useState<{
@@ -267,6 +283,133 @@ export default function Dashboard() {
     }
   }
 
+  // Function to create a new hydration session
+  const createNewSession = async () => {
+    try {
+      // Set loading state
+      setSessionConfig(prev => ({ ...prev, isCreatingSession: true }));
+      
+      // Validate user is logged in
+      if (!sessionEmail) {
+        toast({
+          title: "Not logged in",
+          description: "Please log in to start a new session.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Calculate day start time based on wake-up time and lookback hours
+      const today = new Date();
+      const [hours, minutes] = sessionConfig.wakeUpTime.split(':').map(Number);
+      
+      // Set wake-up time for today
+      const wakeUpTime = new Date(today);
+      wakeUpTime.setHours(hours, minutes, 0, 0);
+      
+      // Calculate day start time (wake-up time minus lookback hours)
+      const dayStartTime = new Date(wakeUpTime);
+      dayStartTime.setHours(wakeUpTime.getHours() - sessionConfig.lookbackHours);
+      
+      // Create a new hydration session in the database
+      const { data: newSession, error } = await supabase
+        .from('hydration_sessions')
+        .insert([
+          {
+            user_id: user?.id,
+            start_time: new Date().toISOString(),
+            is_active: true,
+            day_start_time: dayStartTime.toISOString(),
+            wake_up_time: sessionConfig.wakeUpTime
+          }
+        ])
+        .select()
+        .single();
+      
+      if (error) {
+        throw new Error(`Failed to create session: ${error.message}`);
+      }
+      
+      console.log('New session created:', newSession);
+      
+      // Set the active session in state
+      setActiveSession({
+        id: newSession.id,
+        startTime: newSession.start_time,
+        dayStartTime: newSession.day_start_time,
+        wakeUpTime: newSession.wake_up_time
+      });
+      
+      // Calculate hydration targets based on user profile
+      calculateHydrationTargets(userProfile);
+      
+      // Create a daily target entry linked to this session
+      const { error: targetError } = await supabase
+        .from('daily_targets')
+        .insert([
+          {
+            user_id: user?.id,
+            session_id: newSession.id,
+            water_ml: dailyTarget.water_ml,
+            protein_g: dailyTarget.protein_g,
+            sodium_mg: dailyTarget.sodium_mg,
+            potassium_mg: dailyTarget.potassium_mg
+          }
+        ]);
+      
+      if (targetError) {
+        console.error('Error creating daily target:', targetError);
+      }
+      
+      // Deactivate any previous active sessions
+      const { error: updateError } = await supabase
+        .from('hydration_sessions')
+        .update({ is_active: false })
+        .neq('id', newSession.id)
+        .eq('user_id', user?.id)
+        .eq('is_active', true);
+      
+      if (updateError) {
+        console.error('Error deactivating old sessions:', updateError);
+      }
+      
+      // Save session preferences to user profile for future sessions
+      const { error: userUpdateError } = await supabase
+        .from('users')
+        .update({
+          wake_up_time: sessionConfig.wakeUpTime,
+          session_lookback_hours: sessionConfig.lookbackHours
+        })
+        .eq('id', user?.id);
+      
+      if (userUpdateError) {
+        console.error('Error saving session preferences to profile:', userUpdateError);
+      }
+      
+      // Show success message
+      toast({
+        title: "Session Started",
+        description: `New hydration day started with wake-up time at ${sessionConfig.wakeUpTime}.`,
+      });
+      
+      // Close the modal
+      setShowSessionModal(false);
+      
+      // TODO: Refresh the timeline to show the new session
+      
+    } catch (error) {
+      console.error('Error creating session:', error);
+      toast({
+        title: "Session Creation Failed",
+        description: error instanceof Error ? error.message : "Failed to create new session",
+        variant: "destructive"
+      });
+    } finally {
+      // Reset loading state
+      setSessionConfig(prev => ({ ...prev, isCreatingSession: false }));
+    }
+  };
+  
   // Function to handle profile updates
   const handleUpdateProfile = async () => {
     // Prevent multiple simultaneous update attempts
@@ -324,6 +467,80 @@ export default function Dashboard() {
     } finally {
       // Ensure loading state is always reset
       setTimeout(() => setIsLoading(false), 500);
+    }
+  };
+  
+  // Function to load the user's active hydration session
+  const loadActiveSession = async () => {
+    if (!user?.id) return;
+    
+    try {
+      // Load user's session preferences (wake-up time and lookback hours)
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('wake_up_time, session_lookback_hours')
+        .eq('id', user.id)
+        .single();
+      
+      if (userError) {
+        console.error('Error loading user session preferences:', userError);
+      } else if (userData) {
+        // Update session config with saved preferences
+        setSessionConfig(prev => ({
+          ...prev,
+          wakeUpTime: userData.wake_up_time || prev.wakeUpTime,
+          lookbackHours: userData.session_lookback_hours || prev.lookbackHours
+        }));
+        console.log('Loaded user session preferences:', userData);
+      }
+      const { data, error } = await supabase
+        .from('hydration_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (error) {
+        console.error('Error loading active session:', error);
+        return;
+      }
+      
+      if (data) {
+        console.log('Found active session:', data);
+        setActiveSession({
+          id: data.id,
+          startTime: data.start_time,
+          dayStartTime: data.day_start_time,
+          wakeUpTime: data.wake_up_time
+        });
+        
+        // Also load the daily targets for this session
+        const { data: targetData, error: targetError } = await supabase
+          .from('daily_targets')
+          .select('*')
+          .eq('session_id', data.id)
+          .maybeSingle();
+        
+        if (targetError) {
+          console.error('Error loading session targets:', targetError);
+          return;
+        }
+        
+        if (targetData) {
+          setDailyTarget({
+            water_ml: targetData.water_ml,
+            protein_g: targetData.protein_g,
+            sodium_mg: targetData.sodium_mg,
+            potassium_mg: targetData.potassium_mg
+          });
+        }
+      } else {
+        console.log('No active session found');
+      }
+    } catch (error) {
+      console.error('Error in loadActiveSession:', error);
     }
   };
   
@@ -397,6 +614,9 @@ export default function Dashboard() {
             
             // Calculate hydration targets with database profile
             calculateHydrationTargets(dbProfile);
+            
+            // Load active session after profile is loaded
+            await loadActiveSession();
           } else {
             console.log('No profile found for email, using defaults');
             // Still calculate with whatever profile we have
@@ -685,6 +905,38 @@ export default function Dashboard() {
               <Settings className="h-4 w-4" style={{ color: "#00FFFF" }} />
             </Button>
           </div>
+          {activeSession ? (
+            <div className="flex items-center mr-2 p-1.5 pl-3 pr-2 bg-blue-500/10 border border-blue-500/30 rounded-md">
+              <div className="flex-1 mr-2">
+                {/* Check if session is older than 24 hours */}
+                {new Date().getTime() - new Date(activeSession.startTime).getTime() > 24 * 60 * 60 * 1000 ? (
+                  <div className="text-xs font-medium text-amber-400">Session (24h+)</div>
+                ) : (
+                  <div className="text-xs font-medium text-blue-400">Active Session</div>
+                )}
+                <div className="text-xs text-gray-400">
+                  Wake-up: {activeSession.wakeUpTime}
+                </div>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 bg-green-400/20 border border-green-400/60 hover:bg-green-400/30"
+                style={{ color: "#4ADE80" }}
+                onClick={() => setShowSessionModal(true)}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> New Day
+              </Button>
+            </div>
+          ) : (
+            <Button
+              className="bg-green-400/20 border border-green-400/60 hover:bg-green-400/30 mr-2"
+              style={{ color: "#4ADE80" }}
+              onClick={() => setShowSessionModal(true)}
+            >
+              <Plus className="h-4 w-4 mr-2" /> Start New Day
+            </Button>
+          )}
           <Button
             className="bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30"
             style={{ color: "#00FFFF" }}
@@ -1150,6 +1402,79 @@ export default function Dashboard() {
           >
             Save Profile
           </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* Start New Session Modal */}
+      <Dialog open={showSessionModal} onOpenChange={setShowSessionModal}>
+        <DialogContent className="bg-slate-800 border-green-400/30 sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle style={{ color: "#4ADE80" }}>Start New Hydration Day</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="wakeUpTime" className="text-green-400">Wake-up Time</Label>
+              <Input
+                id="wakeUpTime"
+                type="time"
+                className="bg-slate-700/70 border-slate-600 text-slate-100"
+                value={sessionConfig.wakeUpTime}
+                onChange={(e) => setSessionConfig({ ...sessionConfig, wakeUpTime: e.target.value })}
+              />
+              <p className="text-xs text-slate-400">The time you typically wake up each day</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="lookbackHours" className="text-green-400">Session Lookback (hours)</Label>
+              <Input
+                id="lookbackHours"
+                type="number"
+                min="0"
+                max="12"
+                className="bg-slate-700/70 border-slate-600 text-slate-100"
+                value={sessionConfig.lookbackHours}
+                onChange={(e) => setSessionConfig({ ...sessionConfig, lookbackHours: Number(e.target.value) })}
+              />
+              <p className="text-xs text-slate-400">How many hours before wake-up to include in your day</p>
+            </div>
+
+            <div className="bg-slate-700/50 p-3 rounded-md border border-green-400/20">
+              <p className="text-sm text-slate-300">
+                <strong className="text-green-400">Reminder:</strong> Starting a new day will calculate hydration targets based on your current profile. Make sure your profile is up to date.
+              </p>
+              <Button
+                onClick={() => setShowProfileModal(true)}
+                variant="link"
+                className="p-0 h-auto mt-1 text-green-400 hover:text-green-300"
+              >
+                Review Profile Settings
+              </Button>
+            </div>
+          </div>
+          <div className="flex justify-between gap-4">
+            <Button
+              onClick={() => setShowSessionModal(false)}
+              variant="ghost"
+              className="border border-slate-600"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={createNewSession}
+              className="bg-green-400/20 border border-green-400/60 hover:bg-green-400/30 flex-1"
+              style={{ color: "#4ADE80" }}
+              disabled={sessionConfig.isCreatingSession}
+            >
+              {sessionConfig.isCreatingSession ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Start New Day"
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

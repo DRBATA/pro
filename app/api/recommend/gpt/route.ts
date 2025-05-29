@@ -1,54 +1,16 @@
 import { NextResponse } from 'next/server';
 import { OpenAI } from 'openai';
-import { createClient } from '@supabase/supabase-js';
-
-// Add type safety for request payload
-interface RequestPayload {
-  userId: string;
-}
-
-// Add type for user data
-interface UserData {
-  nickname?: string;
-}
 
 export async function POST(request: Request) {
   try {
-    // Check if OpenAI API key exists
+    // Initialize OpenAI client if API key exists
     if (!process.env.OPENAI_API_KEY) {
+      // Fallback if no API key is available
       return NextResponse.json({
-        error: "OpenAI API key is missing"
-      }, { status: 500 });
-    }
-
-    // Get user ID from request with proper typing
-    const { userId }: RequestPayload = await request.json();
-    
-    if (!userId) {
-      return NextResponse.json({ error: "User ID is required" }, { status: 400 });
-    }
-    
-    // Initialize Supabase client with hardcoded credentials
-    const supabase = createClient(
-      'https://czsgyjuhmazhgyzgizjb.supabase.co', // Your Supabase URL
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6c2d5anVobWF6aGd5emdpempiIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODA3MjE2MDAsImV4cCI6MTk5NjI5NzYwMH0.SZLqryz_-J3jKEp7I72DvCM0aSx0NLnmsh0VL-fGhFY' // Your anon/public key
-    );
-    
-    // Get user nickname from the users table
-    const { data: userData, error } = await supabase
-      .from('users')
-      .select('nickname')
-      .eq('id', userId)
-      .single();
-    
-    if (error) {
-      console.error('Error fetching user data:', error);
-      return NextResponse.json({ error: "Failed to fetch user data" }, { status: 500 });
-    }
-    
-    // Validate userData before using
-    if (!userData) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+        recommendation: {
+          message: "Welcome! I'm your hydration coach. I can help you stay properly hydrated throughout the day."
+        }
+      });
     }
 
     // Initialize OpenAI with API key
@@ -56,36 +18,26 @@ export async function POST(request: Request) {
       apiKey: process.env.OPENAI_API_KEY,
     });
 
-    // Use optional chaining clearly
-    const nickname = userData?.nickname || 'User';
-
-    // Call OpenAI Responses API with personalized prompt
+    // Call OpenAI Responses API with a simple prompt
     const response = await openai.responses.create({
       model: 'gpt-4o-mini',
-      input: `You are a hydration coach for Water Bar. Say hello to ${nickname} and provide a friendly welcome message about hydration. Keep it brief and casual.`,
+      input: 'Introduce yourself as a hydration coach in one brief paragraph. Be friendly and welcoming.',
     });
 
-    // Extract the response text safely with type checking
-    const outputItem = response.output[0];
+    // Extract the response text
+    const message = response.output[0].content[0].text;
 
-    if ('content' in outputItem && outputItem.content.length > 0) {
-      const contentItem = outputItem.content[0];
-      
-      if ('text' in contentItem) {
-        const message = contentItem.text;
-        return NextResponse.json({
-          recommendation: { message }
-        });
-      }
-    }
-    
-    // If we reach here, the response format was not as expected
-    throw new Error('Unexpected response format from OpenAI');
+    return NextResponse.json({
+      recommendation: { message }
+    });
 
   } catch (error) {
-    console.error('Error generating recommendation:', error);
+    console.error('Error:', error);
+    // Fallback message if anything goes wrong
     return NextResponse.json({
-      error: "Failed to generate recommendation"
-    }, { status: 500 });
+      recommendation: {
+        message: "Welcome! I'm your hydration coach. I can help you stay properly hydrated throughout the day."
+      }
+    });
   }
 }

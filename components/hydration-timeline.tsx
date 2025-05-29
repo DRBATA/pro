@@ -210,22 +210,13 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
   
   return (
     <div className="space-y-4">
+      {/* Removed the navigation buttons with arrows since we're only showing today */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={handlePreviousDay}>
-            &lt;
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleToday}>
-            Today
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleNextDay}>
-            &gt;
-          </Button>
-          <span className="font-medium">
-            {isToday(selectedDate) ? 'Today' : format(selectedDate, 'EEE, MMM d')}
-          </span>
-        </div>
+        <span className="font-medium">
+          Timeline for Today
+        </span>
         
+        {/* Keeping the dialog for adding events */}
         <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm">

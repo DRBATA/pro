@@ -43,13 +43,12 @@ import { Slider } from './ui/slider'
 import { Switch } from './ui/switch'
 
 import {
-  getUserDailyTimeline,
+  getUserTimelineEvents,
   getInputLibraryItems,
-  addHydrationLog,
-  fulfillHydrationPlan,
-  addActivityLog,
-  DailyTimelineItem,
-  InputLibraryTotals
+  addTimelineEvent,
+  getActiveHydrationSession,
+  InputLibraryItem,
+  TimelineEvent
 } from '../lib/hydration-data-functions'
 
 interface HydrationTimelineProps {
@@ -58,10 +57,11 @@ interface HydrationTimelineProps {
 
 export function HydrationTimeline({ userId }: HydrationTimelineProps) {
   const [selectedDate, setSelectedDate] = useState(startOfToday())
-  const [timelineItems, setTimelineItems] = useState<DailyTimelineItem[]>([])
+  const [timelineItems, setTimelineItems] = useState<TimelineEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
-  const [libraryItems, setLibraryItems] = useState<InputLibraryTotals[]>([])
+  const [libraryItems, setLibraryItems] = useState<InputLibraryItem[]>([])
+  const [activeSession, setActiveSession] = useState<{ id: string, start_time: string } | null>(null)
   
   // For adding new hydration log
   const [selectedItemId, setSelectedItemId] = useState<string | number>('')
@@ -77,12 +77,22 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
   useEffect(() => {
     loadTimelineData()
     loadLibraryItems()
+    loadActiveSession()
   }, [userId, selectedDate])
+  
+  const loadActiveSession = async () => {
+    try {
+      const session = await getActiveHydrationSession(userId)
+      setActiveSession(session)
+    } catch (error) {
+      console.error('Failed to load active session:', error)
+    }
+  }
   
   const loadTimelineData = async () => {
     setLoading(true)
     try {
-      const items = await getUserDailyTimeline(userId, selectedDate)
+      const items = await getUserTimelineEvents(userId, selectedDate)
       setTimelineItems(items)
     } catch (error) {
       console.error('Failed to load timeline data:', error)
@@ -113,65 +123,88 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
   }
   
   const handleAddHydration = async () => {
-    if (!selectedItemId) return
+    if (!selectedItemId || !activeSession) {
+      console.error('Cannot add hydration event: No selected item or no active session');
+      return;
+    }
     
     try {
-      await addHydrationLog(userId, selectedItemId, quantity)
-      setAddDialogOpen(false)
-      await loadTimelineData()
+      // Get the selected item to determine if it's food or drink
+      const selectedItem = libraryItems.find(item => item.id === selectedItemId);
+      if (!selectedItem) {
+        console.error('Selected item not found in library');
+        return;
+      }
+      
+      // Add the event to the timeline
+      await addTimelineEvent(
+        userId,
+        activeSession.id,
+        selectedItem.category as 'food' | 'drink', // Category from the library item
+        selectedItemId.toString(),
+        quantity,
+        undefined, // No duration for food/drink
+        new Date() // Current time
+      );
+      
+      setAddDialogOpen(false);
+      await loadTimelineData();
       
       // Reset form
-      setSelectedItemId('')
-      setQuantity(1)
+      setSelectedItemId('');
+      setQuantity(1);
     } catch (error) {
-      console.error('Failed to add hydration log:', error)
+      console.error('Failed to add hydration event:', error);
     }
   }
   
   const handleAddActivity = async () => {
+    if (!activeSession) {
+      console.error('Cannot add activity event: No active session');
+      return;
+    }
+    
     try {
-      await addActivityLog(
+      // Add the activity event to the timeline
+      await addTimelineEvent(
         userId,
-        activityType,
-        activityIntensity,
+        activeSession.id,
+        'activity',
+        undefined, // No input item for activity
+        1, // Quantity is always 1 for activities
         activityDuration,
         new Date(),
-        activityOutdoor,
-        activityTemperature
-      )
-      setAddDialogOpen(false)
-      await loadTimelineData()
+        activityOutdoor ? activityTemperature : undefined,
+        undefined, // No humidity data
+        activityType + ' - ' + activityIntensity // Store activity details in notes
+      );
+      
+      setAddDialogOpen(false);
+      await loadTimelineData();
       
       // Reset form
-      setActivityType('walking')
-      setActivityIntensity('moderate')
-      setActivityDuration(30)
-      setActivityOutdoor(false)
-      setActivityTemperature(undefined)
+      setActivityType('walking');
+      setActivityIntensity('moderate');
+      setActivityDuration(30);
+      setActivityOutdoor(false);
+      setActivityTemperature(undefined);
     } catch (error) {
-      console.error('Failed to add activity log:', error)
+      console.error('Failed to add activity event:', error);
     }
   }
   
-  const handleFulfillPlan = async (planId: string) => {
-    try {
-      await fulfillHydrationPlan(planId)
-      await loadTimelineData()
-    } catch (error) {
-      console.error(`Failed to fulfill plan ${planId}:`, error)
-    }
-  }
+  // We no longer need handleFulfillPlan as we're using a different structure
   
-  const getIconForItem = (item: DailyTimelineItem) => {
-    if (item.type === 'activity') {
+  const getIconForItem = (item: TimelineEvent) => {
+    if (item.event_type === 'activity') {
       return <Activity className="h-4 w-4" />
     }
     
-    if (item.item_category === 'drink') {
+    if (item.event_type === 'drink') {
       return <Coffee className="h-4 w-4" />
     }
     
-    if (item.item_category === 'food') {
+    if (item.event_type === 'food') {
       return <Utensils className="h-4 w-4" />
     }
     
@@ -394,65 +427,52 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
       ) : (
         <div className="space-y-2">
           <AnimatePresence>
-            {timelineItems.map((item) => (
-              <motion.div
-                key={`${item.type}-${item.id}`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                className={`flex items-start p-3 rounded-lg border ${
-                  item.fulfilled ? 'bg-muted/30' : 'bg-white'
-                }`}
-              >
-                <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 mr-3">
-                  {getIconForItem(item)}
-                </div>
+            {timelineItems.map((item) => {
+              // Get input library item name if available
+              const libraryItem = item.input_item_id ? 
+                libraryItems.find(lib => lib.id === item.input_item_id) : null;
                 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center">
-                    <p className="font-medium text-sm">
-                      {item.item_name}
-                    </p>
-                    {item.fulfilled && (
-                      <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                        <Check className="h-3 w-3 mr-1" /> Done
-                      </span>
-                    )}
+              const displayName = libraryItem ? libraryItem.name : 
+                (item.notes || item.event_type);
+                
+              return (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-start p-3 rounded-lg border bg-white"
+                >
+                  <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 mr-3">
+                    {getIconForItem(item)}
                   </div>
                   
-                  <div className="flex items-center text-xs text-muted-foreground mt-1">
-                    <Clock className="h-3 w-3 mr-1" />
-                    {format(parseISO(item.timestamp), 'h:mm a')}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center">
+                      <p className="font-medium text-sm">{displayName}</p>
+                    </div>
                     
-                    {item.type === 'activity' ? (
-                      <span className="ml-2">
-                        <Activity className="h-3 w-3 inline mr-1" />
-                        {item.quantity} min
-                      </span>
-                    ) : (
-                      <span className="ml-2">
-                        <DropletHalf className="h-3 w-3 inline mr-1" />
-                        {item.quantity}x
-                      </span>
-                    )}
+                    <div className="flex items-center text-xs text-muted-foreground mt-1">
+                      <Clock className="h-3 w-3 mr-1" />
+                      {format(parseISO(item.event_time), 'h:mm a')}
+                      
+                      {item.event_type === 'activity' ? (
+                        <span className="ml-2">
+                          <Activity className="h-3 w-3 inline mr-1" />
+                          {item.duration_minutes} min
+                        </span>
+                      ) : (
+                        <span className="ml-2">
+                          <Droplet className="h-3 w-3 inline mr-1" />
+                          {item.quantity}x
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-                
-                {item.type === 'plan' && !item.fulfilled && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => handleFulfillPlan(item.id)}
-                  >
-                    Complete
-                  </Button>
-                )}
-              </motion.div>
-            ))}
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </div>
       )}
-    </div>
-  )
-}

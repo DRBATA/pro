@@ -1102,13 +1102,84 @@ function Dashboard() {
                 <Button
                   className="bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30"
                   style={{ color: "#00FFFF" }}
-                  onClick={() => {
-                    // TODO: Add event logic would go here
-                    setShowAddModal(false);
-                    toast({
-                      title: "Event added",
-                      description: "Your hydration event has been logged."
-                    });
+                  onClick={async () => {
+                    if (!user?.id) {
+                      toast({
+                        title: "Not logged in",
+                        description: "You must be logged in to add events.",
+                        variant: "destructive"
+                      });
+                      return;
+                    }
+                    
+                    try {
+                      // Create a timestamp from the selected time
+                      const today = new Date();
+                      const [hours, minutes] = newEvent.time.split(':').map(Number);
+                      today.setHours(hours, minutes, 0);
+                      
+                      if (newEvent.type === 'workout') {
+                        // Log activity
+                        await addActivityLog(
+                          user.id,
+                          'exercise',
+                          'moderate',
+                          newEvent.amount || 30,
+                          today,
+                          false
+                        );
+                      } else {
+                        // For water, electrolyte, protein logs
+                        // First find a matching library item
+                        const libraryItems = await getInputLibraryItems(newEvent.type);
+                        const defaultItem = libraryItems.find(item => 
+                          item.category.toLowerCase() === newEvent.type.toLowerCase()
+                        );
+                        
+                        if (defaultItem) {
+                          await addHydrationLog(
+                            user.id,
+                            defaultItem.id,
+                            newEvent.amount || 1,
+                            today
+                          );
+                        }
+                      }
+                      
+                      // Reload the timeline to show the new event
+                      const timelineData = await getUserDailyTimeline(user.id);
+                      if (timelineData && Array.isArray(timelineData)) {
+                        // Convert timeline items to UI events format
+                        const eventItems = timelineData
+                          .filter(item => item.type === 'log' || item.type === 'activity')
+                          .map(item => ({
+                            id: item.id,
+                            time: new Date(item.timestamp).toTimeString().slice(0, 5),
+                            type: item.item_category === 'drink' ? 'water' : 
+                                  item.item_category === 'activity' ? 'workout' : 'food',
+                            amount: item.quantity,
+                            description: item.item_name
+                          } as HydrationEvent));
+                        
+                        setEvents(eventItems);
+                      }
+                      
+                      // Recalculate hydration gaps after adding event
+                      await loadHydrationGapData();
+                      
+                      setShowAddModal(false);
+                      toast({
+                        title: "Event added",
+                        description: "Your hydration event has been logged."
+                      });
+                    } catch (error) {
+                      console.error('Error adding event:', error);
+                      toast({
+                        title: "Error adding event",
+                        description: "There was a problem logging your event.",
+                        variant: "destructive"
+                      });
+                    }
                   }}
                 >
                   Add Event

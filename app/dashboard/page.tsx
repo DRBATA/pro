@@ -1069,23 +1069,27 @@ function Dashboard() {
                     />
                   </div>
                   
-                  {/* Category tabs */}
+                  {/* Category dropdown */}
                   <div className="mt-2">
-                    <Tabs 
-                      defaultValue="drink" 
+                    <Label className="text-right text-cyan-400 mb-1 block">Category</Label>
+                    <Select
                       value={selectedCategory}
                       onValueChange={(value) => {
                         setSelectedCategory(value as 'drink' | 'food' | 'activity');
                         loadLibraryItems(value as 'drink' | 'food' | 'activity');
                       }}
-                      className="w-full"
                     >
-                      <TabsList className="w-full bg-slate-700">
-                        <TabsTrigger value="drink" className="flex-1">Drinks</TabsTrigger>
-                        <TabsTrigger value="food" className="flex-1">Food</TabsTrigger>
-                        <TabsTrigger value="activity" className="flex-1">Activities</TabsTrigger>
-                      </TabsList>
-                    </Tabs>
+                      <SelectTrigger 
+                        className="bg-slate-700 border-cyan-400/50 text-white w-full"
+                      >
+                        <SelectValue placeholder="Select a category" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-cyan-400/50 text-white">
+                        <SelectItem value="drink" className="focus:bg-cyan-400/20 focus:text-white">Drinks</SelectItem>
+                        <SelectItem value="food" className="focus:bg-cyan-400/20 focus:text-white">Food</SelectItem>
+                        <SelectItem value="activity" className="focus:bg-cyan-400/20 focus:text-white">Activities</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   
                   {/* Search bar */}

@@ -1096,7 +1096,8 @@ function Dashboard() {
                     <Input
                       type="text"
                       placeholder="Search items..."
-                      className="pl-10 bg-slate-700 border-cyan-400/30"
+                      className="pl-10 bg-slate-700 border-cyan-400/50 text-white"
+                      style={{ color: "white", caretColor: "#00FFFF" }}
                       value={searchTerm}
                       onChange={(e) => {
                         setSearchTerm(e.target.value);
@@ -1158,7 +1159,8 @@ function Dashboard() {
                       </Label>
                       <Input
                         type="number"
-                        className="col-span-3 bg-slate-700 border-cyan-400/30"
+                        className="col-span-3 bg-slate-700 border-cyan-400/50 text-white"
+                        style={{ color: "white", caretColor: "#00FFFF" }}
                         value={newEvent.amount || ""}
                         onChange={(e) => setNewEvent({ ...newEvent, amount: Number(e.target.value) })}
                       />
@@ -1169,7 +1171,8 @@ function Dashboard() {
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label className="text-right text-cyan-400">Notes</Label>
                     <Input
-                      className="col-span-3 bg-slate-700 border-cyan-400/30"
+                      className="col-span-3 bg-slate-700 border-cyan-400/50 text-white"
+                      style={{ color: "white", caretColor: "#00FFFF" }}
                       placeholder="Optional notes"
                       value={newEvent.description}
                       onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}

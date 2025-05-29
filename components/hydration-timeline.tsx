@@ -435,29 +435,29 @@ export function HydrationTimeline({ userId }: HydrationTimelineProps) {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="flex items-start p-3 rounded-lg border bg-white"
+                  className="flex items-start p-3 rounded-lg border border-cyan-400/40 bg-slate-700/70"
                 >
-                  <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 mr-3">
+                  <div className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-cyan-500/20 border border-cyan-400/30 mr-3">
                     {getIconForItem(item)}
                   </div>
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center">
-                      <p className="font-medium text-sm">{displayName}</p>
+                      <p className="font-medium text-sm text-white">{displayName}</p>
                     </div>
                     
-                    <div className="flex items-center text-xs text-muted-foreground mt-1">
-                      <Clock className="h-3 w-3 mr-1" />
+                    <div className="flex items-center text-xs text-cyan-300 mt-1">
+                      <Clock className="h-3 w-3 mr-1 text-cyan-300" />
                       {format(parseISO(item.event_time), 'h:mm a')}
                       
                       {item.event_type === 'activity' ? (
-                        <span className="ml-2">
-                          <Activity className="h-3 w-3 inline mr-1" />
+                        <span className="ml-2 bg-cyan-500/20 px-2 py-0.5 rounded-full">
+                          <Activity className="h-3 w-3 inline mr-1 text-cyan-300" />
                           {item.duration_minutes} min
                         </span>
                       ) : (
-                        <span className="ml-2">
-                          <Droplet className="h-3 w-3 inline mr-1" />
+                        <span className="ml-2 bg-cyan-500/20 px-2 py-0.5 rounded-full">
+                          <Droplet className="h-3 w-3 inline mr-1 text-cyan-300" />
                           {item.quantity}x
                         </span>
                       )}

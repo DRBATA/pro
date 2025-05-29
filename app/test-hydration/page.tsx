@@ -88,7 +88,9 @@ export default function TestHydrationPage() {
       'input_library_totals',
       'hydration_logs',
       'activity_logs',
-      'hydration_plans'
+      'hydration_plans',
+      'timeline_events',
+      'hydration_sessions'
     ]
     
     const status: {[key: string]: boolean} = {}
@@ -500,11 +502,11 @@ export default function TestHydrationPage() {
             <CardTitle>Hydration Timeline Component</CardTitle>
           </CardHeader>
           <CardContent>
-            {databaseStatus['hydration_logs'] && databaseStatus['activity_logs'] ? (
+            {databaseStatus['timeline_events'] ? (
               <HydrationTimeline userId={testUserId} />
             ) : (
               <div className="text-center p-4 bg-gray-50 rounded">
-                <p className="text-gray-500">Timeline component requires hydration_logs and activity_logs tables</p>
+                <p className="text-gray-500">Timeline component requires timeline_events table</p>
                 <Button 
                   onClick={() => window.location.reload()} 
                   variant="outline"

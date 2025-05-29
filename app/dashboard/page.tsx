@@ -16,8 +16,9 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { 
-  getUserDailyTimeline, 
-  calculateUserHydrationGaps
+  addTimelineEvent,
+  getActiveHydrationSession,
+  getInputLibraryItems
 } from "@/lib/hydration-data-functions"
 import {
   getUserProfile,
@@ -206,6 +207,13 @@ function Dashboard() {
     description: ""
   })
   
+  // Input library state for the modal
+  const [libraryItems, setLibraryItems] = useState<any[]>([])
+  const [filteredItems, setFilteredItems] = useState<any[]>([])
+  const [selectedCategory, setSelectedCategory] = useState<'drink' | 'food' | 'activity'>('drink')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedLibraryItem, setSelectedLibraryItem] = useState<any>(null)
+  
   // State for user session
   const [sessionEmail, setSessionEmail] = useState<string>("");
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -246,6 +254,37 @@ function Dashboard() {
     const lbm = weight * (1 - bodyFatPercentage);
     console.log(`LBM calculated: ${lbm}kg (${bodyFatPercentage * 100}% body fat)`);  
     return lbm;
+  };
+
+  // Function to load input library items
+  const loadLibraryItems = async (category: 'drink' | 'food' | 'activity') => {
+    try {
+      const items = await getInputLibraryItems(category);
+      setLibraryItems(items);
+      setFilteredItems(items);
+      // Clear search term when switching categories
+      setSearchTerm('');
+    } catch (error) {
+      console.error('Error loading library items:', error);
+      toast({
+        title: "Error loading items",
+        description: "Could not load input library items.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  // Function to filter library items based on search term
+  const filterLibraryItems = (term: string) => {
+    if (!term.trim()) {
+      setFilteredItems(libraryItems);
+    } else {
+      const filtered = libraryItems.filter(item => 
+        item.name.toLowerCase().includes(term.toLowerCase()) ||
+        (item.description && item.description.toLowerCase().includes(term.toLowerCase()))
+      );
+      setFilteredItems(filtered);
+    }
   };
 
   // Function to calculate hydration targets based on user profile
@@ -1042,6 +1081,10 @@ function Dashboard() {
                   size="sm"
                   className="bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30"
                   style={{ color: "#00FFFF" }}
+                  onClick={() => {
+                    // Load input library items when modal opens
+                    loadLibraryItems(selectedCategory);
+                  }}
                 >
                   <Plus className="h-4 w-4 mr-1" /> Add
                 </Button>
@@ -1060,40 +1103,109 @@ function Dashboard() {
                       onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })}
                     />
                   </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label className="text-right text-cyan-400">Type</Label>
-                    <Select
-                      value={newEvent.type}
-                      onValueChange={(value) => setNewEvent({ ...newEvent, type: value as HydrationEventType })}
+                  
+                  {/* Category tabs */}
+                  <div className="mt-2">
+                    <Tabs 
+                      defaultValue="drink" 
+                      value={selectedCategory}
+                      onValueChange={(value) => {
+                        setSelectedCategory(value as 'drink' | 'food' | 'activity');
+                        loadLibraryItems(value as 'drink' | 'food' | 'activity');
+                      }}
+                      className="w-full"
                     >
-                      <SelectTrigger className="col-span-3 bg-slate-700 border-cyan-400/30">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-800 border-cyan-400/30">
-                        <SelectItem value="water">Water</SelectItem>
-                        <SelectItem value="electrolyte">Electrolyte</SelectItem>
-                        <SelectItem value="protein">Protein</SelectItem>
-                        <SelectItem value="workout">Workout</SelectItem>
-                      </SelectContent>
-                    </Select>
+                      <TabsList className="w-full bg-slate-700">
+                        <TabsTrigger value="drink" className="flex-1">Drinks</TabsTrigger>
+                        <TabsTrigger value="food" className="flex-1">Food</TabsTrigger>
+                        <TabsTrigger value="activity" className="flex-1">Activities</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
                   </div>
-                  {(newEvent.type === "water" || newEvent.type === "electrolyte" || newEvent.type === "protein") && (
+                  
+                  {/* Search bar */}
+                  <div className="relative w-full">
+                    <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                      <Search className="w-4 h-4 text-gray-400" />
+                    </div>
+                    <Input
+                      type="text"
+                      placeholder="Search items..."
+                      className="pl-10 bg-slate-700 border-cyan-400/30"
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        filterLibraryItems(e.target.value);
+                      }}
+                    />
+                  </div>
+                  
+                  {/* Library items */}
+                  <div className="max-h-64 overflow-y-auto p-1 bg-slate-700/30 rounded border border-slate-600/50">
+                    {filteredItems.length === 0 ? (
+                      <div className="text-center py-4 text-slate-400">
+                        {searchTerm ? 'No items match your search' : 'Loading items...'}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredItems.map((item) => (
+                          <div 
+                            key={item.id}
+                            className={`p-2 rounded cursor-pointer transition-colors ${selectedLibraryItem?.id === item.id ? 'bg-cyan-500/20 border border-cyan-400/40' : 'hover:bg-slate-700 border border-transparent'}`}
+                            onClick={() => {
+                              setSelectedLibraryItem(item);
+                              
+                              // Set the form values based on the selected item
+                              const eventType = item.category === 'drink' ? 'water' : 
+                                              item.category === 'food' ? 'protein' : 'workout';
+                                              
+                              setNewEvent({
+                                ...newEvent,
+                                type: eventType as HydrationEventType,
+                                amount: item.default_amount || 1,
+                                description: item.name
+                              });
+                            }}
+                          >
+                            <div className="font-medium text-sm" style={{ color: item.category === 'drink' ? '#00FFFF' : item.category === 'food' ? '#FF6B9D' : '#FFD166' }}>
+                              {item.name}
+                            </div>
+                            {item.description && (
+                              <div className="text-xs text-slate-400 mt-1 line-clamp-1">{item.description}</div>
+                            )}
+                            <div className="text-xs text-slate-400 mt-1">
+                              {item.category === 'drink' && `${item.water_volume_ml || 0}ml`}
+                              {item.category === 'food' && `${item.protein_g || 0}g protein`}
+                              {item.category === 'activity' && `${item.duration_min || 30} minutes`}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Amount field */}
+                  {selectedLibraryItem && (
                     <div className="grid grid-cols-4 items-center gap-4">
-                      <Label className="text-right text-cyan-400">Amount</Label>
+                      <Label className="text-right text-cyan-400">
+                        {selectedLibraryItem.category === 'activity' ? 'Duration (min)' : 
+                         selectedLibraryItem.category === 'food' ? 'Amount (g)' : 'Amount (ml)'}
+                      </Label>
                       <Input
                         type="number"
                         className="col-span-3 bg-slate-700 border-cyan-400/30"
-                        placeholder={newEvent.type === "protein" ? "grams" : "ml"}
                         value={newEvent.amount || ""}
                         onChange={(e) => setNewEvent({ ...newEvent, amount: Number(e.target.value) })}
                       />
                     </div>
                   )}
+                  
+                  {/* Notes field */}
                   <div className="grid grid-cols-4 items-center gap-4">
-                    <Label className="text-right text-cyan-400">Description</Label>
+                    <Label className="text-right text-cyan-400">Notes</Label>
                     <Input
                       className="col-span-3 bg-slate-700 border-cyan-400/30"
-                      placeholder="Optional description"
+                      placeholder="Optional notes"
                       value={newEvent.description}
                       onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
                     />
@@ -1118,55 +1230,84 @@ function Dashboard() {
                       const [hours, minutes] = newEvent.time.split(':').map(Number);
                       today.setHours(hours, minutes, 0);
                       
-                      if (newEvent.type === 'workout') {
-                        // Log activity
-                        await addActivityLog(
-                          user.id,
-                          'exercise',
-                          'moderate',
-                          newEvent.amount || 30,
-                          today,
-                          false
-                        );
-                      } else {
-                        // For water, electrolyte, protein logs
-                        // First find a matching library item
-                        const libraryItems = await getInputLibraryItems(newEvent.type);
-                        const defaultItem = libraryItems.find(item => 
-                          item.category.toLowerCase() === newEvent.type.toLowerCase()
-                        );
+                      // Get the active session
+                      const activeSession = await getActiveHydrationSession(user.id);
+                      
+                      if (!activeSession) {
+                        toast({
+                          title: "No active session",
+                          description: "Please start a new hydration session first.",
+                          variant: "destructive"
+                        });
+                        return;
+                      }
+                      
+                      // If we have a selected library item, use it directly
+                      let eventType: 'food' | 'drink' | 'activity';
+                      let inputItemId: string | undefined;
+                      let durationMinutes: number | undefined;
+                      
+                      if (selectedLibraryItem) {
+                        // Use the selected library item
+                        inputItemId = selectedLibraryItem.id.toString();
+                        eventType = selectedLibraryItem.category as 'food' | 'drink' | 'activity';
                         
-                        if (defaultItem) {
-                          await addHydrationLog(
-                            user.id,
-                            defaultItem.id,
-                            newEvent.amount || 1,
-                            today
+                        if (eventType === 'activity') {
+                          durationMinutes = newEvent.amount || selectedLibraryItem.duration_min || 30;
+                        }
+                      } else {
+                        // Fallback for backward compatibility
+                        if (newEvent.type === 'workout') {
+                          eventType = 'activity';
+                          durationMinutes = newEvent.amount || 30;
+                        } else if (newEvent.type === 'water' || newEvent.type === 'electrolyte') {
+                          eventType = 'drink';
+                        } else if (newEvent.type === 'protein' || newEvent.type === 'food') {
+                          eventType = 'food';
+                        } else {
+                          // Default to drink if can't determine
+                          eventType = 'drink';
+                        }
+                        
+                        // Try to find a matching library item if not selected directly
+                        try {
+                          const libraryItems = await getInputLibraryItems(eventType);
+                          const defaultItem = libraryItems.find(item => 
+                            item.name.toLowerCase().includes(newEvent.type.toLowerCase())
                           );
+                          
+                          if (defaultItem) {
+                            inputItemId = defaultItem.id.toString();
+                          }
+                        } catch (err) {
+                          console.error('Error finding matching library item:', err);
                         }
                       }
                       
-                      // Reload the timeline to show the new event
-                      const timelineData = await getUserDailyTimeline(user.id);
-                      if (timelineData && Array.isArray(timelineData)) {
-                        // Convert timeline items to UI events format
-                        const eventItems = timelineData
-                          .filter(item => item.type === 'log' || item.type === 'activity')
-                          .map(item => ({
-                            id: item.id,
-                            time: new Date(item.timestamp).toTimeString().slice(0, 5),
-                            type: item.item_category === 'drink' ? 'water' : 
-                                  item.item_category === 'activity' ? 'workout' : 'food',
-                            amount: item.quantity,
-                            description: item.item_name
-                          } as HydrationEvent));
-                        
-                        setEvents(eventItems);
-                      }
+                      // Add to timeline_events
+                      await addTimelineEvent(
+                        user.id,
+                        activeSession.id,
+                        eventType,
+                        inputItemId,
+                        newEvent.amount || 1,
+                        durationMinutes,
+                        today,
+                        undefined,
+                        undefined,
+                        newEvent.description
+                      );
                       
-                      // Recalculate hydration gaps after adding event
-                      await loadHydrationGapData();
+                      // Clear the form
+                      setNewEvent({
+                        id: '',
+                        time: new Date().toTimeString().slice(0, 5),
+                        type: 'water',
+                        amount: 0,
+                        description: ''
+                      });
                       
+                      // Close the modal
                       setShowAddModal(false);
                       toast({
                         title: "Event added",

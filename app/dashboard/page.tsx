@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { Plus, Droplets, Dumbbell, Clock, Target, User, Settings, Loader2, ShoppingCart } from "lucide-react"
+import { Plus, Droplets, Dumbbell, Clock, Target, User, Settings, Loader2, ShoppingCart, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -18,7 +18,8 @@ import { Progress } from "@/components/ui/progress"
 import { 
   addTimelineEvent,
   getActiveHydrationSession,
-  getInputLibraryItems
+  getInputLibraryItems,
+  getUserTimelineEvents
 } from "@/lib/hydration-data-functions"
 import {
   getUserProfile,
@@ -196,6 +197,7 @@ function Dashboard() {
   
   // Form state
   const [newEvent, setNewEvent] = useState<{
+    id?: string;
     time: string; 
     type: HydrationEventType; 
     amount?: number; 
@@ -776,10 +778,7 @@ function Dashboard() {
       console.log('Starting to load user data...');
       setIsLoading(true);
       try {
-        // Calculate hydration gap using our hydration-data-functions
-        const hydrationGapResult = await calculateUserHydrationGaps(user?.id || '');
-        
-        if (hydrationGapResult && user?.id) {
+        if (user?.id) {
           // Direct query to users table with exact email
           console.log('Querying for user with email:', user.email);
           const { data: profile, error: profileError } = await supabase
@@ -809,43 +808,25 @@ function Dashboard() {
           }
           
           // Get timeline data using the new function
-          const timelineData = await getUserDailyTimeline(user.id);
+          const timelineData = await getUserTimelineEvents(user.id);
           if (timelineData && Array.isArray(timelineData)) {
             // Convert timeline items to UI events format
             const eventItems = timelineData
-              .filter(item => item.type === 'log' || item.type === 'activity')
+              .filter(item => item.event_type === 'food' || item.event_type === 'drink' || item.event_type === 'activity')
               .map(item => ({
                 id: item.id,
-                time: new Date(item.timestamp).toTimeString().slice(0, 5),
-                type: item.item_category === 'drink' ? 'water' : 
-                      item.item_category === 'activity' ? 'workout' : 'food',
+                time: new Date(item.event_time).toTimeString().slice(0, 5),
+                type: item.event_type === 'drink' ? 'water' : 
+                      item.event_type === 'activity' ? 'workout' : 'food',
                 amount: item.quantity,
-                description: item.item_name
+                description: item.notes || 'Event'
               } as HydrationEvent));
             
             setEvents(eventItems);
           }
           
-          // Set hydration gap data for the UI
-          const hydrationData = {
-            hydrationGap: hydrationGapResult.water_gap_ml,
-            context: `Based on your ${hydrationGapResult.summary?.total_activity_minutes || 0} minutes of activity`,
-            leanBodyMass: (profile?.weight || 70) * 0.7, // Estimate LBM as 70% of weight
-            waterLoss: hydrationGapResult.water_gap_ml,
-            waterFromFood: 0, // Not tracked in new system yet
-            totalWaterInput: hydrationGapResult.summary?.total_water_ml || 0,
-            recommendedIntake: (hydrationGapResult.summary?.total_water_ml || 0) + hydrationGapResult.water_gap_ml
-          };
-          
-          setHydrationGapData(hydrationData);
-          
-          // Set daily target based on the gap calculation
-          setDailyTarget({
-            water_ml: hydrationData.recommendedIntake,
-            protein_g: 0.8 * userProfile.weight, // 0.8g per kg of body weight
-            sodium_mg: hydrationGapResult.sodium_gap_mg + (hydrationGapResult.summary?.total_sodium_mg || 0),
-            potassium_mg: hydrationGapResult.potassium_gap_mg + (hydrationGapResult.summary?.total_potassium_mg || 0)
-          });
+          // Note: Hydration targets are calculated by the calculateHydrationTargets function,
+          // which is called separately in the getSessionData useEffect
         }
       } catch (error) {
         console.error('Error loading hydration data:', error);
@@ -945,25 +926,8 @@ function Dashboard() {
         });
         
         // Refresh hydration calculations with new profile data
-        const hydrationData = await calculateUserHydrationGaps(user.id);
-        if (hydrationData) {
-          setHydrationGapData({
-            hydrationGap: hydrationData.water_gap_ml,
-            context: `Based on your ${hydrationData.summary?.total_activity_minutes || 0} minutes of activity`,
-            leanBodyMass: userProfile.weight * 0.7,
-            waterLoss: hydrationData.water_gap_ml,
-            waterFromFood: 0,
-            totalWaterInput: hydrationData.summary?.total_water_ml || 0,
-            recommendedIntake: (hydrationData.summary?.total_water_ml || 0) + hydrationData.water_gap_ml
-          });
-          
-          setDailyTarget({
-            water_ml: ((hydrationData.summary?.total_water_ml || 0) + hydrationData.water_gap_ml),
-            protein_g: 0.8 * userProfile.weight,
-            sodium_mg: hydrationData.sodium_gap_mg + (hydrationData.summary?.total_sodium_mg || 0),
-            potassium_mg: hydrationData.potassium_gap_mg + (hydrationData.summary?.total_potassium_mg || 0)
-          });
-        }
+        // Using the local function which directly updates state
+        calculateHydrationTargets(userProfile);
       }
     } catch (error) {
       console.error('Error updating profile:', error);

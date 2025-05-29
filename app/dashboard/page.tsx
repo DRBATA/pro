@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { Plus, Droplets, Dumbbell, Clock, Target, User, Settings, Loader2, ShoppingCart, Search } from "lucide-react"
+import { Plus, Droplets, Dumbbell, Clock, Target, User, Settings, Loader2, ShoppingCart, Search, BrainCircuit, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -226,6 +226,10 @@ function Dashboard() {
   const [proteinIntake, setProteinIntake] = useState(0)
   const [sodiumIntake, setSodiumIntake] = useState(0)
   const [potassiumIntake, setPotassiumIntake] = useState(0)
+  
+  // State for AI recommendation
+  const [aiRecommendation, setAiRecommendation] = useState<string | null>(null)
+  const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false)
   
   // Function to calculate lean body mass based on weight, sex, and body type
   const calculateLBM = (profile: any) => {
@@ -899,6 +903,54 @@ function Dashboard() {
   }, [user, toast]);
   
   // Function to update user profile
+  // Function to get AI recommendations
+  const getAiRecommendation = async () => {
+    if (!user?.id) {
+      toast({
+        title: "Not logged in",
+        description: "You must be logged in to get personalized recommendations.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      setIsLoadingRecommendation(true);
+      
+      // Call our API endpoint
+      const response = await fetch('/api/recommend/gpt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get recommendation');
+      }
+
+      const data = await response.json();
+      setAiRecommendation(data.recommendation.message);
+      
+      toast({
+        title: "Recommendation Ready",
+        description: "Your personalized hydration plan is available."
+      });
+    } catch (error) {
+      console.error('Error getting recommendation:', error);
+      toast({
+        title: "Error",
+        description: "Could not get hydration recommendations at this time.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoadingRecommendation(false);
+    }
+  };
+
   async function updateProfile() {
     if (!user?.id) return;
     
@@ -1372,36 +1424,60 @@ function Dashboard() {
         <div className="flex-1 p-6">
           {/* Hydration Gap Data */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <Card className="bg-slate-800/50 border-cyan-400/30 shadow-lg shadow-cyan-900/10">
+            <Card className="bg-slate-800/50 border-purple-400/30 shadow-lg shadow-purple-900/10">
               <CardHeader className="pb-2">
                 <CardTitle
-                  className="text-lg font-medium"
-                  style={{ color: "#00FFFF", textShadow: "0 0 8px #00FFFF40" }}
+                  className="text-lg font-medium flex items-center"
+                  style={{ color: "#9D8DF1", textShadow: "0 0 8px rgba(157, 141, 241, 0.4)" }}
                 >
-                  Daily Hydration Status
+                  <BrainCircuit className="h-5 w-5 mr-2" />
+                  Hydration Coach
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2">
+              <CardContent className="space-y-3">
                 {isLoading ? (
                   <div className="flex items-center justify-center h-32">
-                    <div className="w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                    <div className="w-6 h-6 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : isLoadingRecommendation ? (
+                  <div className="p-4 text-center">
+                    <Loader2 className="h-8 w-8 mx-auto mb-2 text-purple-400 animate-spin" />
+                    <div className="text-sm text-slate-300">
+                      Analyzing your hydration needs...
+                    </div>
+                  </div>
+                ) : aiRecommendation ? (
+                  <div className="p-4 bg-purple-500/10 rounded-md border border-purple-400/30">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0 mr-3 mt-1">
+                        <Sparkles className="h-5 w-5 text-purple-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-200">{aiRecommendation}</p>
+                        <Button 
+                          variant="link" 
+                          className="p-0 h-auto mt-2 text-purple-400 hover:text-purple-300"
+                          onClick={getAiRecommendation}
+                        >
+                          Refresh recommendation
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 ) : (
-                  <div>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span>Water intake today</span>
-                      <span>Target</span>
-                    </div>
-                    <div className="flex justify-between font-bold">
-                      <span>{waterIntake}ml</span>
-                      <span className="text-cyan-400">{waterRemaining}ml</span>
-                    </div>
-                    <Progress 
-                      value={waterIntake > 0 && waterRemaining > 0 ? (waterIntake / waterRemaining) * 100 : 0} 
-                      className="h-2 mt-1 bg-slate-800"
-                    />
-                    <div className="text-xs text-muted-foreground mt-2">
-                      Based on your {userProfile.weight}kg {userProfile.bodyType} build
+                  <div className="flex flex-col items-center justify-center p-4">
+                    <div className="text-center mb-3">
+                      <p className="text-sm text-slate-300 mb-3">
+                        Get personalized hydration advice based on your profile and timeline events.
+                      </p>
+                      <Button
+                        onClick={getAiRecommendation}
+                        className="bg-purple-400/20 border border-purple-400/60 hover:bg-purple-400/30"
+                        style={{ color: "#9D8DF1" }}
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Get Hydration Advice
+                      </Button>
                     </div>
                   </div>
                 )}

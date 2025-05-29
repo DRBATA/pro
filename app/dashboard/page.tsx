@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
-import { Plus, Droplets, Dumbbell, Clock, Target, User, Settings, Loader2 } from "lucide-react"
+import { Plus, Droplets, Dumbbell, Clock, Target, User, Settings, Loader2, ShoppingCart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -24,6 +24,10 @@ import {
   updateUserProfile
 } from "@/lib/client-functions"
 import { supabase } from "@/lib/supabase-client"
+import { CartProvider, useCart } from "@/components/cart/CartProvider"
+import CartModal from "@/components/cart/CartModal"
+import ProductGrid from "@/components/products/ProductGrid"
+import { getWaterProduct, getProducts, createSimpleRecommendation } from "@/lib/simple-product-functions"
 
 // Body type display mapping with type safety
 const BODY_TYPES: Record<string, { name: string }> = {
@@ -91,8 +95,59 @@ function hydrationPercentage(current: number, target: number): number {
   return Math.min(Math.round((current / target) * 100), 100);
 }
 
+// Cart Component to wrap everything 
+function DashboardWithCart() {
+  const cart = useCart()
+  
+  return (
+    <>
+      <Dashboard />
+      <CartModal 
+        isOpen={cart.isCartOpen}
+        onClose={cart.closeCart}
+        items={cart.items}
+        onUpdateQuantity={cart.updateQuantity}
+        onRemoveItem={cart.removeItem}
+        onClearCart={cart.clearCart}
+      />
+    </>
+  )
+}
+
+// Cart Component to wrap everything 
+function DashboardWithCart() {
+  const cart = useCart()
+  
+  return (
+    <>
+      <Dashboard />
+      <CartModal 
+        isOpen={cart.isCartOpen}
+        onClose={cart.closeCart}
+        items={cart.items}
+        onUpdateQuantity={cart.updateQuantity}
+        onRemoveItem={cart.removeItem}
+        onClearCart={cart.clearCart}
+      />
+    </>
+  )
+}
+
+// Wrap everything with CartProvider for export
+export default function DashboardPage() {
+  return (
+    <CartProvider>
+      <DashboardWithCart />
+    </CartProvider>
+  )
+}
+
 // Main Dashboard Component
-export default function Dashboard() {
+function Dashboard() {
+  // Product state
+  const [products, setProducts] = useState<any[]>([])
+  const [recommendations, setRecommendations] = useState<any[]>([])
+  const { addItem } = useCart()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const { user } = useUser() // Use the UserContext for authentication
   const { toast } = useToast()
@@ -655,6 +710,39 @@ export default function Dashboard() {
     };
   }, []);
 
+  // Load product data
+  useEffect(() => {
+    async function loadProductData() {
+      try {
+        // Get all products
+        const allProducts = await getProducts();
+        if (allProducts.length > 0) {
+          setProducts(allProducts);
+          
+          // Find a water product for recommendation
+          const waterProduct = allProducts.find(p => p.category === 'water');
+          if (waterProduct) {
+            // Create a simple recommendation
+            setRecommendations(createSimpleRecommendation(waterProduct.id));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading product data:', error);
+      }
+    }
+    
+    loadProductData();
+  }, []);
+  
+  // Handle adding a product to cart
+  const handleAddToCart = (product: any) => {
+    addItem(product);
+    toast({
+      title: "Added to cart",
+      description: `${product.name} added to your order.`,
+    });
+  };
+
   // Load user data on component mount
   useEffect(() => {
     console.log('User data load effect triggered');
@@ -938,6 +1026,13 @@ export default function Dashboard() {
             </Button>
           )}
           <Button
+            className="bg-green-400/20 border border-green-400/60 hover:bg-green-400/30 mr-2"
+            style={{ color: "#4ADE80" }}
+            onClick={() => useCart().openCart()}
+          >
+            <ShoppingCart className="h-4 w-4 mr-2" /> Cart {useCart().itemCount > 0 && `(${useCart().itemCount})`}
+          </Button>
+          <Button
             className="bg-cyan-400/20 border border-cyan-400/60 hover:bg-cyan-400/30"
             style={{ color: "#00FFFF" }}
             onClick={() => (window.location.href = "/")}
@@ -1196,80 +1291,75 @@ export default function Dashboard() {
                 </div>
               ) : userProfile && userProfile.weight > 0 ? (
                 <div className="space-y-6">
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-medium" style={{ color: "#00FFFF" }}>
-                      Personalized Recommendations
-                    </h3>
-                    <div className="text-sm text-slate-400">
-                      Based on your {userProfile.weight}kg {userProfile.bodyType} build
-                    </div>
-                    
-                    {/* Kombucha recommendation */}
-                    <div className="mt-4 p-3 bg-slate-700/50 rounded-md border border-purple-400/20">
-                      <div className="text-base font-medium mb-1" style={{ color: "#9D8DF1" }}>
-                        Weekly Kombucha Plan
-                      </div>
-                      <div className="text-sm text-slate-300">
-                        {userProfile.doWeightTraining && userProfile.doIntenseActivity ? (
-                          <>
-                            <span className="font-bold">4 servings per week</span> recommended for optimal recovery
-                            <div className="text-xs text-slate-400 mt-1">
-                              For high-intensity training and muscle building needs
-                            </div>
-                          </>
-                        ) : userProfile.doWeightTraining || userProfile.doIntenseActivity ? (
-                          <>
-                            <span className="font-bold">3 servings per week</span> recommended for recovery support
-                            <div className="text-xs text-slate-400 mt-1">
-                              To support your {userProfile.doWeightTraining ? "muscle building" : "intense training"} regimen
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <span className="font-bold">2 servings per week</span> recommended for maintenance
-                            <div className="text-xs text-slate-400 mt-1">
-                              For general hydration and wellness support
-                            </div>
-                          </>
-                        )}
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-medium" style={{ color: "#00FFFF" }}>
+                        Recommended Products
+                      </h3>
+                      <div className="text-sm text-slate-400">
+                        Based on your {userProfile.weight}kg {userProfile.bodyType} build
                       </div>
                     </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Button
-                      variant="outline"
-                      className="border-blue-400/30 justify-start"
-                      onClick={() => {
-                        setNewEvent({
-                          ...newEvent,
-                          type: "water",
-                          amount: 500,
-                          description: "Water"
-                        });
-                        setShowAddModal(true);
-                      }}
-                    >
-                      <Droplets className="h-4 w-4 mr-2 text-cyan-400" />
-                      Add 500ml Water
-                    </Button>
                     
-                    <Button
-                      variant="outline"
-                      className="border-blue-400/30 justify-start"
-                      onClick={() => {
-                        setNewEvent({
-                          ...newEvent,
-                          type: "electrolyte",
-                          amount: 330,
-                          description: "Electrolyte Drink"
-                        });
-                        setShowAddModal(true);
-                      }}
-                    >
-                      <Dumbbell className="h-4 w-4 mr-2 text-purple-400" />
-                      Add Electrolyte Drink
-                    </Button>
+                    {/* Product recommendations */}
+                    {products.length > 0 ? (
+                      <div className="mt-4">
+                        <ProductGrid 
+                          products={products}
+                          recommendations={recommendations}
+                          onAddToCart={handleAddToCart}
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-4 p-6 bg-slate-700/50 rounded-md border border-cyan-400/20 text-center">
+                        <Loader2 className="h-8 w-8 mx-auto mb-2 text-cyan-400 animate-spin" />
+                        <div className="text-sm text-slate-300">
+                          Loading recommended products...
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Hydration tracking buttons */}
+                    <div className="mt-4">
+                      <h3 className="text-base font-medium mb-2" style={{ color: "#9D8DF1" }}>
+                        Quick Hydration Tracking
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <Button
+                          variant="outline"
+                          className="border-blue-400/30 justify-start"
+                          onClick={() => {
+                            setNewEvent({
+                              ...newEvent,
+                              type: "water",
+                              amount: 500,
+                              description: "Water"
+                            });
+                            setShowAddModal(true);
+                          }}
+                        >
+                          <Droplets className="h-4 w-4 mr-2 text-cyan-400" />
+                          Add 500ml Water
+                        </Button>
+                        
+                        <Button
+                          variant="outline"
+                          className="border-blue-400/30 justify-start"
+                          onClick={() => {
+                            setNewEvent({
+                              ...newEvent,
+                              type: "electrolyte",
+                              amount: 330,
+                              description: "Electrolyte Drink"
+                            });
+                            setShowAddModal(true);
+                          }}
+                        >
+                          <Dumbbell className="h-4 w-4 mr-2 text-purple-400" />
+                          Add Electrolyte Drink
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ) : (

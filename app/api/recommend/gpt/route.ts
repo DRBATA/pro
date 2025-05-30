@@ -4,8 +4,13 @@ import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
   try {
-    // Get userId from request body
-    const { userId } = await request.json();
+    // Parse and log the entire request body
+    const requestBody = await request.json();
+    console.log('Full request body received:', requestBody);
+    
+    // Extract userId and log it
+    const { userId } = requestBody;
+    console.log('Extracted userId:', userId);
 
     // Initialize OpenAI client if API key exists
     if (!process.env.OPENAI_API_KEY) {

@@ -924,7 +924,7 @@ function Dashboard() {
         console.log(`Fetching timeline events for user ${user.id} since ${today}`);
         const { data: events, error: eventsError } = await supabase
           .from('timeline_events')
-          .select('input_item_id, quantity, created_at')
+          .select('input_item_id, quantity, created_at, amount, type')
           .eq('user_id', user.id)
           .gte('created_at', today);
           
@@ -934,66 +934,94 @@ function Dashboard() {
           
         if (events && events.length > 0) {
           console.log(`Found ${events.length} timeline events`);
-          const itemIds = events.filter(e => e.input_item_id).map(e => e.input_item_id);
-          if (itemIds.length > 0) {
-            console.log(`Fetching library items for ids: ${JSON.stringify(itemIds)}`);
-            const { data: items, error: itemsError } = await supabase
-              .from('input_library')
-              .select('id, ecf, icf, acf')
-              .in('id', itemIds);
-              
-            if (itemsError) {
-              console.error('Error fetching library items:', itemsError);
+          console.log('Timeline events:', JSON.stringify(events, null, 2));
+          
+          // Directly use the amount field from timeline events
+          events.forEach(event => {
+            // Check if this is a water event with an amount
+            if (event.amount && event.type === 'water') {
+              const waterAmount = Number(event.amount) || 0;
+              actualWaterIntake += waterAmount;
+              console.log(`Water event: ${waterAmount}ml, Running total: ${actualWaterIntake}ml`);
             }
-              
-            if (items && items.length > 0) {
-              console.log(`Found ${items.length} items in the library`);
-              console.log('Items:', items);
-              events.forEach(event => {
-                const item = items.find(i => i.id === event.input_item_id);
-                if (item && event.quantity) {
-                  // Calculate water intake from compartment fields
-                  let itemWaterTotal = 0;
-                  
-                  // Extract water from ECF compartment
-                  try {
-                    const ecf = item.ecf ? (typeof item.ecf === 'string' ? JSON.parse(item.ecf) : item.ecf) : {};
-                    if (ecf && ecf.H2O) {
-                      itemWaterTotal += Number(ecf.H2O) || 0;
-                      console.log(`ECF water: ${ecf.H2O}ml`);
-                    }
-                  } catch (e) { console.error('Error parsing ECF:', e); }
-                  
-                  // Extract water from ICF compartment
-                  try {
-                    const icf = item.icf ? (typeof item.icf === 'string' ? JSON.parse(item.icf) : item.icf) : {};
-                    if (icf && icf.H2O) {
-                      itemWaterTotal += Number(icf.H2O) || 0;
-                      console.log(`ICF water: ${icf.H2O}ml`);
-                    }
-                  } catch (e) { console.error('Error parsing ICF:', e); }
-                  
-                  // Extract water from ACF compartment
-                  try {
-                    const acf = item.acf ? (typeof item.acf === 'string' ? JSON.parse(item.acf) : item.acf) : {};
-                    if (acf && acf.H2O) {
-                      itemWaterTotal += Number(acf.H2O) || 0;
-                      console.log(`ACF water: ${acf.H2O}ml`);
-                    }
-                  } catch (e) { console.error('Error parsing ACF:', e); }
-                  
-                  // Multiply by quantity and add to total
-                  const eventWater = itemWaterTotal * event.quantity;
-                  actualWaterIntake += eventWater;
-                  console.log(`Item ${item.id}: Water per unit: ${itemWaterTotal}ml, Quantity: ${event.quantity}, Added: ${eventWater}ml`);
-                }
-              });
-              console.log(`Total calculated water intake: ${actualWaterIntake}ml`);
-            } else {
-              console.log('No items found in the library that match timeline events');
+          });
+          
+          console.log(`Total water intake from timeline: ${actualWaterIntake}ml`);
+          
+          // If no water events were found in the timeline, try the old method as fallback
+          if (actualWaterIntake === 0) {
+            console.log('No water events found with amount, trying to calculate from library items...');
+            
+            const itemIds = events.filter(e => e.input_item_id).map(e => e.input_item_id);
+            if (itemIds.length > 0) {
+              console.log(`Fetching library items for ids: ${JSON.stringify(itemIds)}`);
+              const { data: items, error: itemsError } = await supabase
+                .from('input_library')
+                .select('id, ecf, icf, acf')
+                .in('id', itemIds);
+                
+              if (itemsError) {
+                console.error('Error fetching library items:', itemsError);
+              }
+                
+              if (items && items.length > 0) {
+                console.log(`Found ${items.length} items in the library`);
+                
+                events.forEach(event => {
+                  const item = items.find(i => i.id === event.input_item_id);
+                  if (item && event.quantity) {
+                    // Calculate water intake from compartment fields
+                    let itemWaterTotal = 0;
+                    
+                    // Extract water from all compartments
+                    try {
+                      // Handle each compartment individually to avoid TypeScript indexing errors
+                      // ECF compartment
+                      try {
+                        if (item.ecf) {
+                          const ecf = typeof item.ecf === 'string' ? JSON.parse(item.ecf) : item.ecf;
+                          if (ecf && ecf.H2O) {
+                            const water = Number(ecf.H2O) || 0;
+                            itemWaterTotal += water;
+                            console.log(`ECF water: ${water}ml`);
+                          }
+                        }
+                      } catch (e) { console.error('Error parsing ECF:', e); }
+                      
+                      // ICF compartment
+                      try {
+                        if (item.icf) {
+                          const icf = typeof item.icf === 'string' ? JSON.parse(item.icf) : item.icf;
+                          if (icf && icf.H2O) {
+                            const water = Number(icf.H2O) || 0;
+                            itemWaterTotal += water;
+                            console.log(`ICF water: ${water}ml`);
+                          }
+                        }
+                      } catch (e) { console.error('Error parsing ICF:', e); }
+                      
+                      // ACF compartment
+                      try {
+                        if (item.acf) {
+                          const acf = typeof item.acf === 'string' ? JSON.parse(item.acf) : item.acf;
+                          if (acf && acf.H2O) {
+                            const water = Number(acf.H2O) || 0;
+                            itemWaterTotal += water;
+                            console.log(`ACF water: ${water}ml`);
+                          }
+                        }
+                      } catch (e) { console.error('Error parsing ACF:', e); }
+                    } catch (e) { console.error('Error processing compartments:', e); }
+                    
+                    // Multiply by quantity and add to total
+                    const eventWater = itemWaterTotal * event.quantity;
+                    actualWaterIntake += eventWater;
+                    console.log(`Item ${item.id}: Water per unit: ${itemWaterTotal}ml, Quantity: ${event.quantity}, Added: ${eventWater}ml`);
+                  }
+                });
+                console.log(`Total calculated water intake: ${actualWaterIntake}ml`);
+              }
             }
-          } else {
-            console.log('No valid item IDs in timeline events');
           }
         } else {
           console.log('No timeline events found for today');
@@ -1002,15 +1030,13 @@ function Dashboard() {
         console.error('Error calculating water intake:', error);
       }
       
-      // Fallback: If no water intake was calculated, use a percentage of the target
+      // Log if no water intake was calculated
       if (actualWaterIntake === 0) {
-        console.log('Using fallback water intake calculation');
-        // Estimate based on time of day - assume user has consumed 25% of their target by now
-        const hourOfDay = new Date().getHours();
-        const estimatedPercentage = Math.min(Math.max(hourOfDay / 24, 0.1), 0.9);
-        actualWaterIntake = Math.round(waterRemaining * estimatedPercentage);
-        console.log(`Fallback water intake: ${actualWaterIntake}ml (${Math.round(estimatedPercentage * 100)}% of target)`);
+        console.log('WARNING: No water intake was calculated from timeline events');
       }
+      
+      // Debug: Log final water intake value before API call
+      console.log(`FINAL water intake value being sent to API: ${actualWaterIntake}ml`);
       
       // Call our API endpoint with calculated water intake
       const response = await fetch('/api/recommend/gpt', {

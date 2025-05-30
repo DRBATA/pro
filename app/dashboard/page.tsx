@@ -917,7 +917,43 @@ function Dashboard() {
     try {
       setIsLoadingRecommendation(true);
       
-      // Call our API endpoint with our already calculated hydration values
+      // Calculate actual water intake from timeline
+      let actualWaterIntake = 0;
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const { data: events } = await supabase
+          .from('timeline_events')
+          .select('input_item_id, quantity')
+          .eq('user_id', user.id)
+          .gte('created_at', today);
+          
+        if (events && events.length > 0) {
+          console.log(`Found ${events.length} timeline events`);
+          const itemIds = events.filter(e => e.input_item_id).map(e => e.input_item_id);
+          if (itemIds.length > 0) {
+            const { data: items } = await supabase
+              .from('input_library')
+              .select('id, water_ml')
+              .in('id', itemIds);
+              
+            if (items) {
+              events.forEach(event => {
+                const item = items.find(i => i.id === event.input_item_id);
+                if (item && item.water_ml && event.quantity) {
+                  actualWaterIntake += (item.water_ml * event.quantity);
+                }
+              });
+              console.log(`Calculated actual water intake: ${actualWaterIntake}ml`);
+            }
+          }
+        } else {
+          console.log('No timeline events found for today');
+        }
+      } catch (error) {
+        console.error('Error calculating water intake:', error);
+      }
+      
+      // Call our API endpoint with calculated water intake
       const response = await fetch('/api/recommend/gpt', {
         method: 'POST',
         headers: {
@@ -926,7 +962,7 @@ function Dashboard() {
         body: JSON.stringify({
           userId: user.id,
           hydrationData: {
-            currentWaterIntake: waterIntake, 
+            currentWaterIntake: actualWaterIntake, 
             targetWaterIntake: waterRemaining,
             proteinIntake: proteinIntake,
             sodiumIntake: sodiumIntake,

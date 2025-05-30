@@ -933,17 +933,50 @@ function Dashboard() {
           if (itemIds.length > 0) {
             const { data: items } = await supabase
               .from('input_library')
-              .select('id, water_ml')
+              .select('id, ecf, icf, acf')
               .in('id', itemIds);
               
             if (items) {
               events.forEach(event => {
                 const item = items.find(i => i.id === event.input_item_id);
-                if (item && item.water_ml && event.quantity) {
-                  actualWaterIntake += (item.water_ml * event.quantity);
+                if (item && event.quantity) {
+                  // Calculate water intake from compartment fields
+                  let itemWaterTotal = 0;
+                  
+                  // Extract water from ECF compartment
+                  try {
+                    const ecf = item.ecf ? (typeof item.ecf === 'string' ? JSON.parse(item.ecf) : item.ecf) : {};
+                    if (ecf && ecf.H2O) {
+                      itemWaterTotal += Number(ecf.H2O) || 0;
+                      console.log(`ECF water: ${ecf.H2O}ml`);
+                    }
+                  } catch (e) { console.error('Error parsing ECF:', e); }
+                  
+                  // Extract water from ICF compartment
+                  try {
+                    const icf = item.icf ? (typeof item.icf === 'string' ? JSON.parse(item.icf) : item.icf) : {};
+                    if (icf && icf.H2O) {
+                      itemWaterTotal += Number(icf.H2O) || 0;
+                      console.log(`ICF water: ${icf.H2O}ml`);
+                    }
+                  } catch (e) { console.error('Error parsing ICF:', e); }
+                  
+                  // Extract water from ACF compartment
+                  try {
+                    const acf = item.acf ? (typeof item.acf === 'string' ? JSON.parse(item.acf) : item.acf) : {};
+                    if (acf && acf.H2O) {
+                      itemWaterTotal += Number(acf.H2O) || 0;
+                      console.log(`ACF water: ${acf.H2O}ml`);
+                    }
+                  } catch (e) { console.error('Error parsing ACF:', e); }
+                  
+                  // Multiply by quantity and add to total
+                  const eventWater = itemWaterTotal * event.quantity;
+                  actualWaterIntake += eventWater;
+                  console.log(`Item ${item.id}: Water per unit: ${itemWaterTotal}ml, Quantity: ${event.quantity}, Added: ${eventWater}ml`);
                 }
               });
-              console.log(`Calculated actual water intake: ${actualWaterIntake}ml`);
+              console.log(`Total calculated water intake: ${actualWaterIntake}ml`);
             }
           }
         } else {

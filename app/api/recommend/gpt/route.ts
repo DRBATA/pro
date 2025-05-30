@@ -29,24 +29,33 @@ export async function POST(request: Request) {
     
     let nickname = 'User';
     
-    // If we have userId and Supabase credentials, try to get the nickname
-    if (userId && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    // If we have userId, try to get the nickname with hardcoded credentials
+    if (userId) {
       try {
-        // Initialize Supabase client
+        console.log('Attempting to connect to Supabase with hardcoded credentials');
+        // Initialize Supabase client with hardcoded credentials
         const supabase = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL,
-          process.env.SUPABASE_SERVICE_ROLE_KEY
+          'https://czsgyjuhmazhgyzgizjb.supabase.co',
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6c2d5anVobWF6aGd5emdpempiIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODA3MjE2MDAsImV4cCI6MTk5NjI5NzYwMH0.SZLqryz_-J3jKEp7I72DvCM0aSx0NLnmsh0VL-fGhFY'
         );
         
         // Get user nickname from the users table
-        const { data: userData } = await supabase
+        console.log('Querying Supabase for userId:', userId);
+        const { data: userData, error } = await supabase
           .from('users')
           .select('nickname')
           .eq('id', userId)
           .single();
         
-        if (userData && userData.nickname) {
+        console.log('Supabase query result:', { userData, error });
+        
+        if (error) {
+          console.error('Supabase query error:', error);
+        } else if (userData && userData.nickname) {
+          console.log('Found nickname:', userData.nickname);
           nickname = userData.nickname;
+        } else {
+          console.log('No nickname found or nickname is empty');
         }
       } catch (supabaseError) {
         console.error('Supabase error:', supabaseError);

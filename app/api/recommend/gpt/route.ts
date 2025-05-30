@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { OpenAI } from 'openai';
-import { createClient } from '@supabase/supabase-js';
 
 export async function POST(request: Request) {
   try {
@@ -27,46 +26,33 @@ export async function POST(request: Request) {
       apiKey: process.env.OPENAI_API_KEY,
     });
     
-    let nickname = 'User';
+    // Extract the name directly from the request body if available
+    let name = 'User';
     
-    // If we have userId, try to get the nickname with hardcoded credentials
-    if (userId) {
-      try {
-        console.log('Attempting to connect to Supabase with hardcoded credentials');
-        // Initialize Supabase client with hardcoded credentials
-        const supabase = createClient(
-          'https://czsgyjuhmazhgyzgizjb.supabase.co',
-          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6c2d5anVobWF6aGd5emdpempiIiwicm9sZSI6ImFub24iLCJpYXQiOjE2ODA3MjE2MDAsImV4cCI6MTk5NjI5NzYwMH0.SZLqryz_-J3jKEp7I72DvCM0aSx0NLnmsh0VL-fGhFY'
-        );
-        
-        // Get user nickname from the users table
-        console.log('Querying Supabase for userId:', userId);
-        const { data: userData, error } = await supabase
-          .from('users')
-          .select('nickname')
-          .eq('id', userId)
-          .single();
-        
-        console.log('Supabase query result:', { userData, error });
-        
-        if (error) {
-          console.error('Supabase query error:', error);
-        } else if (userData && userData.nickname) {
-          console.log('Found nickname:', userData.nickname);
-          nickname = userData.nickname;
-        } else {
-          console.log('No nickname found or nickname is empty');
-        }
-      } catch (supabaseError) {
-        console.error('Supabase error:', supabaseError);
-        // Continue with default nickname if Supabase fails
-      }
+    if (requestBody.hydrationData && requestBody.hydrationData.userProfile && requestBody.hydrationData.userProfile.name) {
+      name = requestBody.hydrationData.userProfile.name;
+      console.log('Using name from user profile:', name);
+    } else {
+      console.log('No name found in user profile, using default');
     }
+    
+    // Extract other useful hydration data for the AI
+    const hydrationData = requestBody.hydrationData || {};
+    const currentWaterIntake = hydrationData.currentWaterIntake || 0;
+    const targetWaterIntake = hydrationData.targetWaterIntake || 2750;
+    const progressPercentage = Math.round((currentWaterIntake / targetWaterIntake) * 100);
+    
+    console.log('Hydration progress:', `${progressPercentage}% (${currentWaterIntake}/${targetWaterIntake}ml)`);
+
 
     // Call OpenAI Responses API with personalized prompt
     const response = await openai.responses.create({
       model: 'gpt-4o-mini',
-      input: `You are a hydration coach for Water Bar. Say hello to ${nickname} and provide a friendly welcome message about hydration. Keep it brief and casual.`,
+      input: `You are a hydration coach for Water Bar. Say hello to ${name} and provide a friendly welcome message about hydration.
+      
+      Current hydration progress: ${progressPercentage}% (${currentWaterIntake}ml out of ${targetWaterIntake}ml target).
+      
+      Keep your response brief, friendly and casual. Include an emoji or two to make it engaging.`,
     });
 
     // Extract the response text - this might throw TypeScript errors but should work at runtime

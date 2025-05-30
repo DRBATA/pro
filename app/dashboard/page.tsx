@@ -917,7 +917,39 @@ function Dashboard() {
     try {
       setIsLoadingRecommendation(true);
       
-      // Call our API endpoint with our already calculated hydration values
+      // Get today's timeline events
+      const todayEvents = timelineEvents.filter(event => {
+        // Make sure the event has a valid time
+        if (!event.time) return false;
+        
+        const eventDate = new Date(event.time);
+        const today = new Date();
+        return eventDate.getDate() === today.getDate() && 
+               eventDate.getMonth() === today.getMonth() &&
+               eventDate.getFullYear() === today.getFullYear();
+      });
+
+      console.log(`Found ${todayEvents.length} events from today's timeline`);
+
+      // Get all unique item IDs from timeline events
+      const itemIds = todayEvents
+        .map(event => event.itemId)
+        .filter(Boolean); // Remove any undefined/null values
+
+      // Fetch library items for these IDs
+      let libraryItems = [];
+      if (itemIds.length > 0) {
+        console.log(`Fetching ${itemIds.length} library items for timeline events`);
+        const { data: items } = await supabase
+          .from('input_library')
+          .select('*')
+          .in('id', itemIds);
+        
+        libraryItems = items || [];
+        console.log(`Retrieved ${libraryItems.length} library items`);
+      }
+      
+      // Call our API endpoint with timeline and library data
       const response = await fetch('/api/recommend/gpt', {
         method: 'POST',
         headers: {
@@ -932,6 +964,10 @@ function Dashboard() {
             sodiumIntake: sodiumIntake,
             potassiumIntake: potassiumIntake,
             userProfile: userProfile
+          },
+          timelineData: {
+            events: todayEvents,
+            libraryItems: libraryItems
           }
         })
       });

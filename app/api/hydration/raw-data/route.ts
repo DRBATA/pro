@@ -35,7 +35,6 @@ export async function GET(req: Request) {
         event_type,
         input_item_id,
         notes,
-        response_id,
         input_library (
           id, name, description, category,
           ivf, isf, icf

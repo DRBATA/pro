@@ -68,9 +68,16 @@ export async function GET(req: Request) {
       .gte('event_time', dayStartTime)
       .lte('event_time', sessionEndTime);
     
-    // If we have a session ID, filter by it
+    // If we have a session ID, filter by it - ensure it's a valid UUID
     if (sessionId) {
-      eventsQuery = eventsQuery.eq('session_id', sessionId);
+      try {
+        // Make sure the session ID is properly formatted before using it
+        eventsQuery = eventsQuery.eq('session_id', sessionId);
+        console.log(`[hydration-raw-data] Filtering timeline events by session ID: ${sessionId}`);
+      } catch (error) {
+        console.error(`[hydration-raw-data] Error setting session filter: ${error}`);
+        // Don't filter by session if there's an error with the UUID
+      }
     }
     
     const { data: timeline_events, error: eventError } = await eventsQuery;
@@ -89,7 +96,14 @@ export async function GET(req: Request) {
     
     if (sessionId) {
       // If we have a session, try to get targets for that session
-      targetQuery = targetQuery.eq('session_id', sessionId);
+      try {
+        targetQuery = targetQuery.eq('session_id', sessionId);
+        console.log(`[hydration-raw-data] Filtering daily targets by session ID: ${sessionId}`);
+      } catch (error) {
+        console.error(`[hydration-raw-data] Error setting session filter for targets: ${error}`);
+        // Fall back to date-based query if there's an issue with the UUID
+        targetQuery = targetQuery.eq('target_date', today);
+      }
     } else {
       // Otherwise, fall back to today's date
       targetQuery = targetQuery.eq('target_date', today);

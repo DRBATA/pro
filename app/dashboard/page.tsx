@@ -476,7 +476,12 @@ function Dashboard() {
       // Close the modal
       setShowSessionModal(false);
       
-      // TODO: Refresh the timeline to show the new session
+      // Refresh the timeline to show the new session
+      setEvents([]); // Clear existing events 
+      // The events will be re-fetched automatically when dependencies change
+      
+      // Reset the AI recommendation since it belongs to the previous session
+      setAiRecommendation(null);
       
     } catch (error) {
       console.error('Error creating session:', error);

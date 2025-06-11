@@ -28,12 +28,34 @@ export async function POST(req: Request) {
     
     console.log(`[save-ai-response] Saving response for user ${user_id} with response_id: ${response_id}`);
     
+    let sessionIdToUse = session_id;
+    
+    // If no session_id was provided, try to get the active session
+    if (!sessionIdToUse) {
+      console.log('[save-ai-response] No session_id provided, looking for active session');
+      const { data: activeSession, error: sessionError } = await supabase
+        .from('hydration_sessions')
+        .select('id')
+        .eq('user_id', user_id)
+        .eq('is_active', true)
+        .order('start_time', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (sessionError) {
+        console.log('[save-ai-response] No active session found:', sessionError.message);
+      } else if (activeSession) {
+        sessionIdToUse = activeSession.id;
+        console.log(`[save-ai-response] Found active session: ${sessionIdToUse}`);
+      }
+    }
+    
     // Create a timeline event for the AI response
     const { data: newEvent, error } = await supabase
       .from('timeline_events')
       .insert({
         user_id,
-        session_id: session_id || null, // Optional session ID
+        session_id: sessionIdToUse || null,
         event_type: 'ai_response',
         event_time: new Date().toISOString(),
         response_id,

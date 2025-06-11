@@ -24,9 +24,31 @@ export async function GET(req: Request) {
   const today = new Date().toISOString().split('T')[0];
   console.log(`[hydration-raw-data] Fetching data for user ${user_id} on ${today}`);
 
+  // Get the active session for this user
+  const { data: activeSession, error: sessionError } = await supabase
+    .from('hydration_sessions')
+    .select('id, day_start_time, start_time')
+    .eq('user_id', user_id)
+    .eq('is_active', true)
+    .order('start_time', { ascending: false })
+    .limit(1)
+    .single();
+  
+  if (sessionError && sessionError.code !== 'PGRST116') { // Not found is ok
+    console.error('[hydration-raw-data] Error fetching active session:', sessionError);
+    return NextResponse.json({ error: sessionError.message }, { status: 500 });
+  }
+
+  // If no active session found, we'll use today's date as fallback
+  const sessionId = activeSession?.id;
+  const dayStartTime = activeSession?.day_start_time || `${today}T00:00:00Z`;
+  const sessionEndTime = `${today}T23:59:59Z`; // End of today as default end time
+
+  console.log(`[hydration-raw-data] Using session: ${sessionId || 'none'} with start time: ${dayStartTime}`);
+
   try {
     // 1. Get timeline events joined with input_library
-    const { data: timeline_events, error: eventError } = await supabase
+    let eventsQuery = supabase
       .from('timeline_events')
       .select(`
         id,
@@ -35,14 +57,23 @@ export async function GET(req: Request) {
         event_type,
         input_item_id,
         notes,
+        session_id,
+        response_id,
         input_library (
           id, name, description, category,
           ivf, isf, icf
         )
       `)
       .eq('user_id', user_id)
-      .gte('event_time', `${today}T00:00:00Z`)
-      .lte('event_time', `${today}T23:59:59Z`);
+      .gte('event_time', dayStartTime)
+      .lte('event_time', sessionEndTime);
+    
+    // If we have a session ID, filter by it
+    if (sessionId) {
+      eventsQuery = eventsQuery.eq('session_id', sessionId);
+    }
+    
+    const { data: timeline_events, error: eventError } = await eventsQuery;
       
     if (eventError) {
       console.error('[hydration-raw-data] Error fetching timeline events:', eventError);
@@ -50,12 +81,21 @@ export async function GET(req: Request) {
     }
     
     // 2. Get daily hydration targets
-    const { data: targets, error: targetError } = await supabase
+    // First try to get targets for the specific session
+    let targetQuery = supabase
       .from('daily_targets')
       .select('water_ml, sodium_mg, potassium_mg, protein_g')
-      .eq('user_id', user_id)
-      .eq('target_date', today)
-      .single();
+      .eq('user_id', user_id);
+    
+    if (sessionId) {
+      // If we have a session, try to get targets for that session
+      targetQuery = targetQuery.eq('session_id', sessionId);
+    } else {
+      // Otherwise, fall back to today's date
+      targetQuery = targetQuery.eq('target_date', today);
+    }
+    
+    const { data: targets, error: targetError } = await targetQuery.single();
       
     if (targetError && targetError.code !== 'PGRST116') { // Not found is ok, we'll use defaults
       console.error('[hydration-raw-data] Error fetching daily targets:', targetError);

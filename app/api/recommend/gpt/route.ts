@@ -36,18 +36,15 @@ export async function POST(request: Request) {
       console.log('No name found in user profile, using default');
     }
     
-    // Extract other useful hydration data for the AI
+    // Extract raw hydration data from the request body
     const hydrationData = requestBody.hydrationData || {};
-    const currentWaterIntake = hydrationData.currentWaterIntake || 0;
-    const targetWaterIntake = hydrationData.targetWaterIntake || 2750;
-    const progressPercentage = Math.round((currentWaterIntake / targetWaterIntake) * 100);
     
-    console.log('Hydration progress:', `${progressPercentage}% (${currentWaterIntake}/${targetWaterIntake}ml)`);
-    
-    // Get timeline events with input library data
+    // Get timeline events and targets from raw data
     const rawData = hydrationData.rawData || {};
     const timelineEvents = rawData.timeline_events || [];
     const targets = rawData.targets || {};
+    
+    console.log('Raw hydration data received:', `${timelineEvents.length} timeline events and targets`);
     
     // Log the actual timeline events (careful with PII data)
     console.log(`Found ${timelineEvents.length} timeline events to analyze`);
@@ -132,11 +129,11 @@ export async function POST(request: Request) {
       model: 'gpt-4o-mini',
       input: `You are a hydration coach for Water Bar. Say hello to ${name} and provide a friendly welcome message about hydration.
       
-      Current hydration progress: ${progressPercentage}% (${currentWaterIntake}ml out of ${targetWaterIntake}ml target).
-      
-      Daily targets: Water: ${targets.water_ml || targetWaterIntake}ml, Protein: ${targets.protein_g || 0}g, Sodium: ${targets.sodium_mg || 0}mg, Potassium: ${targets.potassium_mg || 0}mg${timelineContext}
+      Daily targets: Water: ${targets.water_ml || 2500}ml, Protein: ${targets.protein_g || 0}g, Sodium: ${targets.sodium_mg || 0}mg, Potassium: ${targets.potassium_mg || 0}mg${timelineContext}
       
       ${hydrationScienceContext}
+      
+      Analyze the timeline events to understand the user's current hydration status and progress. Consider the quantity, timing, and properties of each drink (including ivf/isf/icf values). Calculate the user's current progress toward their daily water target.
       
       Use your understanding of hydration science to provide helpful context about their hydration quality, not just quantity. If relevant, briefly explain how their drink choices are affecting different fluid compartments.
       

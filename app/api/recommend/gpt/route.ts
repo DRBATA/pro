@@ -88,6 +88,45 @@ export async function POST(request: Request) {
       });
     }
 
+    // Define hydration science context for the AI
+    const hydrationScienceContext = `
+      HYDRATION SCIENCE REFERENCE:
+      
+      • Fluid Compartments: The human body has 3 main fluid compartments that require proper hydration:
+      
+      1. IVF (Intra-Vascular Fluid): 
+         - Blood plasma compartment
+         - Affects blood pressure, circulation, nutrient delivery
+         - Key electrolytes: Sodium (Na+), small amounts of potassium (K+)
+         - Represents ~5% of body weight
+      
+      2. ISF (Inter-Stitial Fluid):
+         - Fluid between cells
+         - Delivers nutrients from bloodstream to cells
+         - Removes cellular waste
+         - Similar electrolyte profile to plasma but with less protein
+         - Represents ~15% of body weight
+      
+      3. ICF (Intra-Cellular Fluid):
+         - Fluid inside cells
+         - Critical for cellular functions and metabolism
+         - High in potassium (K+), low in sodium (Na+)
+         - Contains proteins and other essential molecules
+         - Represents ~40% of body weight
+      
+      • Fluid & Electrolyte Impact in Timeline Events:
+        - When you see ivf/isf/icf values in drinks, they represent how fluids distribute to each compartment
+        - High ivf values: Increases blood plasma volume more rapidly (e.g., isotonic sports drinks)
+        - High isf values: Better extracellular hydration (e.g., electrolyte waters)
+        - High icf values: Better cellular hydration (e.g., water with higher potassium)
+      
+      • Hydration Quality Metrics:
+        - Optimal hydration requires proper fluid distribution across all compartments
+        - Electrolyte balance is as important as total water intake
+        - Timing of intake affects absorption and utilization
+        - Temperature, activity level and climate affect hydration needs
+    `;
+
     // Call OpenAI Responses API with personalized prompt
     const response = await openai.responses.create({
       model: 'gpt-4o-mini',
@@ -96,6 +135,10 @@ export async function POST(request: Request) {
       Current hydration progress: ${progressPercentage}% (${currentWaterIntake}ml out of ${targetWaterIntake}ml target).
       
       Daily targets: Water: ${targets.water_ml || targetWaterIntake}ml, Protein: ${targets.protein_g || 0}g, Sodium: ${targets.sodium_mg || 0}mg, Potassium: ${targets.potassium_mg || 0}mg${timelineContext}
+      
+      ${hydrationScienceContext}
+      
+      Use your understanding of hydration science to provide helpful context about their hydration quality, not just quantity. If relevant, briefly explain how their drink choices are affecting different fluid compartments.
       
       Keep your response brief, friendly and casual. Include an emoji or two to make it engaging.`,
     });

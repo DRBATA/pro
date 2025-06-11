@@ -1109,7 +1109,36 @@ function Dashboard() {
       }
 
       const data = await response.json();
-      setAiRecommendation(data.recommendation.message);
+      const { message, response_id } = data.recommendation;
+      
+      // Set the message in the UI
+      setAiRecommendation(message);
+      
+      // If we have a response_id, save the AI response to the timeline
+      if (response_id) {
+        try {
+          console.log(`Saving AI response with response_id ${response_id} to timeline`);
+          const saveResponse = await fetch('/api/hydration/save-ai-response', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: user.id,
+              response_id,
+              message,
+              // We could add session_id here if we implement session management
+            })
+          });
+          
+          if (!saveResponse.ok) {
+            console.error('Failed to save AI response to timeline:', await saveResponse.text());
+          } else {
+            console.log('AI response successfully saved to timeline');
+          }
+        } catch (saveError) {
+          console.error('Error saving AI response to timeline:', saveError);
+          // Non-blocking error - the UI will still show the recommendation
+        }
+      }
       
       toast({
         title: "Recommendation Ready",

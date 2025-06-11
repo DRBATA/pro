@@ -55,11 +55,49 @@ export async function POST(request: Request) {
       Keep your response brief, friendly and casual. Include an emoji or two to make it engaging.`,
     });
 
-    // Extract the response text - this might throw TypeScript errors but should work at runtime
-    const message = response.output[0].content[0].text;
+    // Extract the response text and response_id
+    let message = "";
+    const response_id = response.id;
+    
+    // Extract text from response using a safer approach that's compatible with TypeScript
+    try {
+      // Access response.output safely with type assertions
+      const output = response.output as any[];
+      if (output && output.length > 0) {
+        const firstOutput = output[0];
+        
+        // Handle different response formats
+        if (firstOutput && typeof firstOutput === 'object') {
+          // For message format with content array
+          if (firstOutput.content && Array.isArray(firstOutput.content) && firstOutput.content.length > 0) {
+            const firstContent = firstOutput.content[0];
+            if (firstContent && firstContent.text) {
+              message = firstContent.text;
+            }
+          } 
+          // Sometimes the response might be structured differently
+          else if (firstOutput.text && typeof firstOutput.text === 'string') {
+            message = firstOutput.text;
+          }
+        }
+      }
+      
+      if (!message) {
+        console.warn('Could not extract message from response using expected structure:', JSON.stringify(response));
+        message = "Welcome! I'm your hydration coach. How can I help you today?";
+      }
+    } catch (error) {
+      console.error('Error extracting message from response:', error);
+      message = "Welcome! I'm your hydration coach. How can I help you today?";
+    }
+    
+    console.log('Generated response_id:', response_id);
 
     return NextResponse.json({
-      recommendation: { message }
+      recommendation: { 
+        message,
+        response_id 
+      }
     });
 
   } catch (error) {
@@ -67,7 +105,8 @@ export async function POST(request: Request) {
     // Fallback message if anything goes wrong
     return NextResponse.json({
       recommendation: {
-        message: "Welcome! I'm your hydration coach. I can help you stay properly hydrated throughout the day."
+        message: "Welcome! I'm your hydration coach. I can help you stay properly hydrated throughout the day.",
+        response_id: null
       }
     });
   }

@@ -41,20 +41,36 @@ export async function GET(req: Request) {
     
     console.log('[assistant-message] Successfully retrieved message');
     
-    // Extract text content from the response
+    // Extract text content from the response using a safer approach
     let textContent = '';
     
-    // Handle different response output types
-    if (response.output && response.output.length > 0) {
-      const outputItem = response.output[0];
-      
-      // Check if it's a text response
-      if ('content' in outputItem && 
-          Array.isArray(outputItem.content) && 
-          outputItem.content.length > 0 &&
-          'text' in outputItem.content[0]) {
-        textContent = outputItem.content[0].text || '';
+    try {
+      // Access response.output safely with type assertions
+      const output = response.output as any[];
+      if (output && output.length > 0) {
+        const firstOutput = output[0];
+        
+        // Handle different response formats
+        if (firstOutput && typeof firstOutput === 'object') {
+          // For message format with content array
+          if (firstOutput.content && Array.isArray(firstOutput.content) && firstOutput.content.length > 0) {
+            const firstContent = firstOutput.content[0];
+            if (firstContent && firstContent.text) {
+              textContent = firstContent.text;
+            }
+          } 
+          // Sometimes the response might be structured differently
+          else if (firstOutput.text && typeof firstOutput.text === 'string') {
+            textContent = firstOutput.text;
+          }
+        }
       }
+      
+      if (!textContent) {
+        console.warn('[assistant-message] Could not extract message from response:', JSON.stringify(response));
+      }
+    } catch (error) {
+      console.error('[assistant-message] Error extracting message from response:', error);
     }
     
     // Return the message content

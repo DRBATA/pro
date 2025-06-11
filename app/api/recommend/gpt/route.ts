@@ -43,7 +43,50 @@ export async function POST(request: Request) {
     const progressPercentage = Math.round((currentWaterIntake / targetWaterIntake) * 100);
     
     console.log('Hydration progress:', `${progressPercentage}% (${currentWaterIntake}/${targetWaterIntake}ml)`);
-
+    
+    // Get timeline events with input library data
+    const rawData = hydrationData.rawData || {};
+    const timelineEvents = rawData.timeline_events || [];
+    const targets = rawData.targets || {};
+    
+    // Log the actual timeline events (careful with PII data)
+    console.log(`Found ${timelineEvents.length} timeline events to analyze`);
+    
+    // Format timeline events for the prompt
+    let timelineContext = '';
+    if (timelineEvents.length > 0) {
+      timelineContext = '\n\nRecent hydration timeline:\n';
+      
+      // Sort events by time (most recent first)
+      const sortedEvents = [...timelineEvents].sort((a, b) => 
+        new Date(b.event_time).getTime() - new Date(a.event_time).getTime()
+      ).slice(0, 5); // Limit to 5 most recent events
+      
+      sortedEvents.forEach(event => {
+        const time = new Date(event.event_time).toLocaleTimeString('en-US', {
+          hour: '2-digit', 
+          minute: '2-digit'
+        });
+        
+        const itemName = event.input_library ? event.input_library.name : 'Unknown item';
+        const eventType = event.event_type || 'event';
+        const quantity = event.quantity || 0;
+        
+        // Include hydration details if available
+        let hydrationDetails = '';
+        if (event.input_library && eventType === 'drink') {
+          const ivf = event.input_library.ivf || 0;
+          const isf = event.input_library.isf || 0;
+          const icf = event.input_library.icf || 0;
+          
+          if (ivf || isf || icf) {
+            hydrationDetails = ` (ivf:${ivf}%, isf:${isf}%, icf:${icf}%)`;
+          }
+        }
+        
+        timelineContext += `- ${time}: ${eventType} - ${itemName} - ${quantity}${hydrationDetails}\n`;
+      });
+    }
 
     // Call OpenAI Responses API with personalized prompt
     const response = await openai.responses.create({
@@ -51,6 +94,8 @@ export async function POST(request: Request) {
       input: `You are a hydration coach for Water Bar. Say hello to ${name} and provide a friendly welcome message about hydration.
       
       Current hydration progress: ${progressPercentage}% (${currentWaterIntake}ml out of ${targetWaterIntake}ml target).
+      
+      Daily targets: Water: ${targets.water_ml || targetWaterIntake}ml, Protein: ${targets.protein_g || 0}g, Sodium: ${targets.sodium_mg || 0}mg, Potassium: ${targets.potassium_mg || 0}mg${timelineContext}
       
       Keep your response brief, friendly and casual. Include an emoji or two to make it engaging.`,
     });

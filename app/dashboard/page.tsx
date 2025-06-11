@@ -917,6 +917,20 @@ function Dashboard() {
     try {
       setIsLoadingRecommendation(true);
       
+      // New: First fetch raw hydration data from our new API endpoint
+      console.log(`Fetching raw hydration data for user ${user.id}`);
+      const rawDataResponse = await fetch(`/api/hydration/raw-data?user_id=${user.id}`);
+      
+      if (!rawDataResponse.ok) {
+        console.error('Error fetching raw hydration data:', await rawDataResponse.text());
+        // Continue with existing code as fallback
+      } else {
+        // Process the raw data
+        const rawHydrationData = await rawDataResponse.json();
+        console.log('Raw hydration data:', rawHydrationData);
+        // We'll use this data to enhance our AI call, but still keep the existing code for now
+      }
+      
       // Calculate actual water intake from timeline
       let actualWaterIntake = 0;
       try {
@@ -1038,7 +1052,47 @@ function Dashboard() {
       // Debug: Log final water intake value before API call
       console.log(`FINAL water intake value being sent to API: ${actualWaterIntake}ml`);
       
-      // Call our API endpoint with calculated water intake
+      // Prepare enhanced hydration data
+      // Using type assertion to allow for extended properties
+      interface EnhancedHydrationData {
+        currentWaterIntake: number;
+        targetWaterIntake: number;
+        proteinIntake: number;
+        sodiumIntake: number;
+        potassiumIntake: number;
+        userProfile: typeof userProfile;
+        rawData?: any; // Allow optional raw data property
+      }
+      
+      let enhancedHydrationData: EnhancedHydrationData = {
+        currentWaterIntake: actualWaterIntake, 
+        targetWaterIntake: waterRemaining,
+        proteinIntake: proteinIntake,
+        sodiumIntake: sodiumIntake,
+        potassiumIntake: potassiumIntake,
+        userProfile: userProfile
+      };
+      
+      // Add raw data if available
+      try {
+        const rawDataResponse = await fetch(`/api/hydration/raw-data?user_id=${user.id}`);
+        if (rawDataResponse.ok) {
+          const rawData = await rawDataResponse.json();
+          console.log('Including raw hydration data in AI request');
+          // Update hydration data with raw data
+          enhancedHydrationData.rawData = rawData;
+          
+          // If available, use DB targets as the source of truth
+          if (rawData.targets?.water_ml) {
+            enhancedHydrationData.targetWaterIntake = rawData.targets.water_ml;
+          }
+        }
+      } catch (error) {
+        console.error('Error enhancing hydration data:', error);
+        // Continue with basic hydration data
+      }
+      
+      // Call our API endpoint with calculated water intake (now enhanced)
       const response = await fetch('/api/recommend/gpt', {
         method: 'POST',
         headers: {
@@ -1046,14 +1100,7 @@ function Dashboard() {
         },
         body: JSON.stringify({
           userId: user.id,
-          hydrationData: {
-            currentWaterIntake: actualWaterIntake, 
-            targetWaterIntake: waterRemaining,
-            proteinIntake: proteinIntake,
-            sodiumIntake: sodiumIntake,
-            potassiumIntake: potassiumIntake,
-            userProfile: userProfile
-          }
+          hydrationData: enhancedHydrationData
         })
       });
 

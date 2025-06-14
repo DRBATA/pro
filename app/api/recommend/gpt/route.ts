@@ -47,8 +47,9 @@ export async function POST(request: Request) {
     const rawData = hydrationData.rawData || {};
     const timelineEvents = rawData.timeline_events || [];
     const targets = rawData.targets || {};
+    const inputLibrary = rawData.input_library || [];
     
-    console.log('Raw hydration data received:', `${timelineEvents.length} timeline events and targets`);
+    console.log('Raw hydration data received:', `${timelineEvents.length} timeline events, ${inputLibrary.length} input library items, and targets`);
     
     // Log the actual timeline events (careful with PII data)
     console.log(`Found ${timelineEvents.length} timeline events to analyze`);
@@ -126,7 +127,66 @@ export async function POST(request: Request) {
       Your task is to produce a single, **friendly**, **actionable plan** in plain language—**no math, no JSON, no background explanations**—telling the user exactly what to consume (in grams or ml) and when, to close their remaining nutrient gaps.
     `;
 
-    // Call OpenAI Responses API with personalized prompt
+    // Format the input library to only include relevant food/drink options with their nutritional values
+    let inputLibraryContext = '';
+    if (inputLibrary && inputLibrary.length > 0) {
+      inputLibraryContext = '\n\nAvailable Food & Drink Options:\n';
+      
+      // Sort items into categories
+      const categorizedItems: {[key: string]: any[]} = {};
+      
+      inputLibrary.forEach((item: any) => {
+        const category = item.category || 'Other';
+        if (!categorizedItems[category]) {
+          categorizedItems[category] = [];
+        }
+        categorizedItems[category].push(item);
+      });
+      
+      // Format each category
+      Object.entries(categorizedItems).forEach(([category, items]) => {
+        // Only add categories with items
+        if (items.length > 0) {
+          inputLibraryContext += `\n${category}:\n`;
+          
+          // Format each item with its nutritional values
+          items.forEach((item: any) => {
+            // Format the nutritional properties
+            const formatNutritionalData = (obj: any): string => {
+              if (!obj) return '';
+              if (typeof obj !== 'object' || Object.keys(obj).length === 0) return '';
+              
+              const parts = [];
+              if (obj.Na) parts.push(`Na:${obj.Na} mg`);
+              if (obj.H2O) parts.push(`H2O:${obj.H2O} ml`);
+              if (obj.K) parts.push(`K:${obj.K} mg`);
+              
+              return parts.join(', ');
+            };
+            
+            // Extract nutritional data from each compartment
+            const ivfData = formatNutritionalData(item.ivf);
+            const isfData = formatNutritionalData(item.isf);
+            const icfData = formatNutritionalData(item.icf);
+            
+            // Combine all nutritional information
+            const nutritionParts = [ivfData, isfData, icfData].filter(part => part !== '');
+            
+            // Add protein info if available
+            if (item.protein_g !== undefined && item.protein_g !== null) {
+              nutritionParts.push(`Protein:${item.protein_g} g`);
+            }
+            
+            const nutritionalDetails = nutritionParts.length > 0 ? ` → ${nutritionParts.join(', ')}` : '';
+            
+            // Add the formatted item
+            inputLibraryContext += `- ${item.name} ${nutritionalDetails}\n`;
+          });
+        }
+      });
+    }
+    
+    // Call OpenAI Responses API with personalized prompt including the input library
     const response = await openai.responses.create({
       model: 'gpt-4o-mini',
       input: `${coachSystemPrompt}
@@ -139,8 +199,9 @@ export async function POST(request: Request) {
       - Sodium target: ${targets.sodium_mg || 0}mg
       - Potassium target: ${targets.potassium_mg || 0}mg
       ${timelineContext}
+      ${inputLibraryContext}
       
-      Based on your timeline and targets, provide a friendly, actionable plan with specific suggestions on what to consume to meet your remaining nutrient goals today. Keep it brief and engaging.`,
+      Based on your timeline and targets, provide a friendly, actionable plan with specific suggestions on what to consume to meet your remaining nutrient goals today. Use ONLY items from the Available Food & Drink Options list. Keep it brief and engaging.`,
     });
 
     // Extract the response text and response_id

@@ -36,6 +36,10 @@ export async function POST(request: Request) {
       console.log('No name found in user profile, using default');
     }
     
+    // Get session_id if available
+    const sessionId = requestBody.sessionId || null;
+    console.log('Using session ID:', sessionId);
+    
     // Extract raw hydration data from the request body
     const hydrationData = requestBody.hydrationData || {};
     
@@ -69,75 +73,74 @@ export async function POST(request: Request) {
         const eventType = event.event_type || 'event';
         const quantity = event.quantity || 0;
         
-        // Include hydration details if available
-        let hydrationDetails = '';
-        if (event.input_library && eventType === 'drink') {
-          const ivf = event.input_library.ivf || 0;
-          const isf = event.input_library.isf || 0;
-          const icf = event.input_library.icf || 0;
+        // Include nutritional details if available
+        let nutritionalDetails = '';
+        if (event.input_library) {
+          // Format to match the Input Library example format
+          const formatNutritionalData = (obj: any): string => {
+            if (!obj) return '';
+            if (typeof obj !== 'object' || Object.keys(obj).length === 0) return '';
+            
+            // Create a readable representation focused on Na, H2O, K values
+            const parts = [];
+            if (obj.Na) parts.push(`Na:${obj.Na} mg`);
+            if (obj.H2O) parts.push(`H2O:${obj.H2O} ml`);
+            if (obj.K) parts.push(`K:${obj.K} mg`);
+            
+            return parts.join(', ');
+          };
+
+          // Extract nutritional data from each compartment
+          const ivfData = formatNutritionalData(event.input_library.ivf);
+          const isfData = formatNutritionalData(event.input_library.isf);
+          const icfData = formatNutritionalData(event.input_library.icf);
           
-          if (ivf || isf || icf) {
-            hydrationDetails = ` (ivf:${ivf}%, isf:${isf}%, icf:${icf}%)`;
+          // Combine all nutritional information
+          const nutritionParts = [ivfData, isfData, icfData].filter(part => part !== '');
+          
+          // Add protein info if available
+          if (event.input_library.protein_g !== undefined && event.input_library.protein_g !== null) {
+            nutritionParts.push(`Protein:${event.input_library.protein_g} g`);
+          }
+          
+          if (nutritionParts.length > 0) {
+            nutritionalDetails = ` → ${nutritionParts.join(', ')}`;
           }
         }
         
-        timelineContext += `- ${time}: ${eventType} - ${itemName} - ${quantity}${hydrationDetails}\n`;
+        timelineContext += `- ${time}: ${eventType} - ${itemName} - ${quantity}${nutritionalDetails}\n`;
       });
     }
 
-    // Define hydration science context for the AI
-    const hydrationScienceContext = `
-      HYDRATION SCIENCE REFERENCE:
-      
-      • Fluid Compartments: The human body has 3 main fluid compartments that require proper hydration:
-      
-      1. IVF (Intra-Vascular Fluid): 
-         - Blood plasma compartment
-         - Affects blood pressure, circulation, nutrient delivery
-         - Key electrolytes: Sodium (Na+), small amounts of potassium (K+)
-         - Represents ~5% of body weight
-      
-      2. ISF (Inter-Stitial Fluid):
-         - Fluid between cells
-         - Delivers nutrients from bloodstream to cells
-         - Removes cellular waste
-         - Similar electrolyte profile to plasma but with less protein
-         - Represents ~15% of body weight
-      
-      3. ICF (Intra-Cellular Fluid):
-         - Fluid inside cells
-         - Critical for cellular functions and metabolism
-         - High in potassium (K+), low in sodium (Na+)
-         - Contains proteins and other essential molecules
-         - Represents ~40% of body weight
-      
-      • Fluid & Electrolyte Impact in Timeline Events:
-        - When you see ivf/isf/icf values in drinks, they represent how fluids distribute to each compartment
-        - High ivf values: Increases blood plasma volume more rapidly (e.g., isotonic sports drinks)
-        - High isf values: Better extracellular hydration (e.g., electrolyte waters)
-        - High icf values: Better cellular hydration (e.g., water with higher potassium)
-      
-      • Hydration Quality Metrics:
-        - Optimal hydration requires proper fluid distribution across all compartments
-        - Electrolyte balance is as important as total water intake
-        - Timing of intake affects absorption and utilization
-        - Temperature, activity level and climate affect hydration needs
+    // Define the new hydration & nutrition coach system prompt
+    const coachSystemPrompt = `
+      You are a hydration and nutrition coach for Water Bar.
+
+      You will receive:
+
+      * The user's **name**.
+      * Today's **daily targets** for water, sodium, potassium, and protein (these already include any backend-applied multipliers for protein focus or sweat/activity).
+      * A **timeline** of today's intake events (each event: timestamp, item name or ID).
+      * An **input library** of available foods and drinks, where each item lists its exact contributions of water ("H2O"), sodium ("Na"), potassium ("K"), and protein per serving.
+
+      Your task is to produce a single, **friendly**, **actionable plan** in plain language—**no math, no JSON, no background explanations**—telling the user exactly what to consume (in grams or ml) and when, to close their remaining nutrient gaps.
     `;
 
     // Call OpenAI Responses API with personalized prompt
     const response = await openai.responses.create({
       model: 'gpt-4o-mini',
-      input: `You are a hydration coach for Water Bar. Say hello to ${name} and provide a friendly welcome message about hydration.
+      input: `${coachSystemPrompt}
+
+      Hello ${name}! I'm your hydration and nutrition coach from Water Bar.
       
-      Daily targets: Water: ${targets.water_ml || 2500}ml, Protein: ${targets.protein_g || 0}g, Sodium: ${targets.sodium_mg || 0}mg, Potassium: ${targets.potassium_mg || 0}mg${timelineContext}
+      Here's your information for today:
+      - Daily water target: ${targets.water_ml || 2500}ml
+      - Protein target: ${targets.protein_g || 0}g
+      - Sodium target: ${targets.sodium_mg || 0}mg
+      - Potassium target: ${targets.potassium_mg || 0}mg
+      ${timelineContext}
       
-      ${hydrationScienceContext}
-      
-      Analyze the timeline events to understand the user's current hydration status and progress. Consider the quantity, timing, and properties of each drink (including ivf/isf/icf values). Calculate the user's current progress toward their daily water target.
-      
-      Use your understanding of hydration science to provide helpful context about their hydration quality, not just quantity. If relevant, briefly explain how their drink choices are affecting different fluid compartments.
-      
-      Keep your response brief, friendly and casual. Include an emoji or two to make it engaging.`,
+      Based on your timeline and targets, provide a friendly, actionable plan with specific suggestions on what to consume to meet your remaining nutrient goals today. Keep it brief and engaging.`,
     });
 
     // Extract the response text and response_id
@@ -177,6 +180,41 @@ export async function POST(request: Request) {
     }
     
     console.log('Generated response_id:', response_id);
+    
+    // Save the AI response to the timeline
+    try {
+      // Get the base URL for server-side API calls
+      const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
+      const host = process.env.VERCEL_URL || 'localhost:3000';
+      const baseUrl = `${protocol}://${host}`;
+      
+      // Prepare the request body for the save-ai-response endpoint
+      const saveRequestBody = {
+        user_id: userId,
+        response_id: response_id,
+        message: message,
+        session_id: sessionId
+      };
+      
+      // Call the save-ai-response endpoint
+      console.log('Saving AI response to timeline:', saveRequestBody);
+      const saveResponse = await fetch(`${baseUrl}/api/hydration/save-ai-response`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(saveRequestBody)
+      });
+      
+      if (!saveResponse.ok) {
+        throw new Error(`Failed to save AI response: ${saveResponse.status}`);
+      }
+      
+      console.log('Successfully saved AI response to timeline');
+    } catch (error) {
+      // Log error but continue - we don't want to block the response if saving fails
+      console.error('Error saving AI response to timeline:', error);
+    }
 
     return NextResponse.json({
       recommendation: { 

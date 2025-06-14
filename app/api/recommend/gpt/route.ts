@@ -40,14 +40,30 @@ export async function POST(request: Request) {
     const sessionId = requestBody.sessionId || null;
     console.log('Using session ID:', sessionId);
     
-    // Extract raw hydration data from the request body
+    // Extract hydration data from the request body
     const hydrationData = requestBody.hydrationData || {};
     
     // Get timeline events and targets from raw data
     const rawData = hydrationData.rawData || {};
     const timelineEvents = rawData.timeline_events || [];
-    const targets = rawData.targets || {};
+    
+    // Extract targets from rawData or fall back to direct properties
+    const targets = rawData.targets || {
+      water_ml: hydrationData.targetWaterIntake || 0,
+      protein_g: hydrationData.proteinIntake || 0,
+      sodium_mg: hydrationData.sodiumIntake || 0,
+      potassium_mg: hydrationData.potassiumIntake || 0
+    };
+    
+    // Get input library (may be empty in the legacy format)
     const inputLibrary = rawData.input_library || [];
+    
+    // Log the format we're receiving
+    if (rawData.timeline_events) {
+      console.log('Using enhanced rawData format with timeline events');
+    } else {
+      console.log('Using legacy format without timeline events');
+    }
     
     console.log('Raw hydration data received:', `${timelineEvents.length} timeline events, ${inputLibrary.length} input library items, and targets`);
     
@@ -87,6 +103,7 @@ export async function POST(request: Request) {
             if (obj.Na) parts.push(`Na:${obj.Na} mg`);
             if (obj.H2O) parts.push(`H2O:${obj.H2O} ml`);
             if (obj.K) parts.push(`K:${obj.K} mg`);
+            if (obj.protein) parts.push(`Protein:${obj.protein} g`);
             
             return parts.join(', ');
           };
@@ -151,16 +168,15 @@ export async function POST(request: Request) {
           
           // Format each item with its nutritional values
           items.forEach((item: any) => {
-            // Format the nutritional properties
+            // Format nutritional data helper
             const formatNutritionalData = (obj: any): string => {
               if (!obj) return '';
               if (typeof obj !== 'object' || Object.keys(obj).length === 0) return '';
-              
               const parts = [];
               if (obj.Na) parts.push(`Na:${obj.Na} mg`);
               if (obj.H2O) parts.push(`H2O:${obj.H2O} ml`);
               if (obj.K) parts.push(`K:${obj.K} mg`);
-              
+              if (obj.protein) parts.push(`Protein:${obj.protein} g`);
               return parts.join(', ');
             };
             
@@ -186,6 +202,29 @@ export async function POST(request: Request) {
       });
     }
     
+    // Setup context based on user's name and daily targets
+    const userContext = hydrationData.userProfile?.name
+      ? `User's name: ${hydrationData.userProfile.name}\n`
+      : '';
+      
+    // Log the source of targets for debugging
+    if (rawData.targets) {
+      console.log('Using targets from rawData.targets (database source)');
+    } else {
+      console.log('Using targets from direct hydrationData properties (frontend calculations)');
+    }
+    console.log('Using targets:', targets);
+    
+    // Format the targets for the AI prompt
+    const targetsContext = `Daily targets:\n` +
+      `- Water: ${targets.water_ml || 0} ml\n` +
+      `- Protein: ${targets.protein_g || 0} g\n` +
+      `- Sodium: ${targets.sodium_mg || 0} mg\n` +
+      `- Potassium: ${targets.potassium_mg || 0} mg\n`;
+    
+    // NOTE: We're not including currentStatusContext anymore as it was using inconsistent data
+    // The AI will infer progress directly from timeline events
+      
     // Call OpenAI Responses API with personalized prompt including the input library
     const response = await openai.responses.create({
       model: 'gpt-4o-mini',
@@ -194,10 +233,8 @@ export async function POST(request: Request) {
       Hello ${name}! I'm your hydration and nutrition coach from Water Bar.
       
       Here's your information for today:
-      - Daily water target: ${targets.water_ml || 2500}ml
-      - Protein target: ${targets.protein_g || 0}g
-      - Sodium target: ${targets.sodium_mg || 0}mg
-      - Potassium target: ${targets.potassium_mg || 0}mg
+      ${userContext}
+      ${targetsContext}
       ${timelineContext}
       ${inputLibraryContext}
       
@@ -247,9 +284,12 @@ export async function POST(request: Request) {
       // Get the base URL for server-side API calls
       const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
       const host = process.env.VERCEL_URL || 'localhost:3000';
-      const baseUrl = `${protocol}://${host}`;
-      
-      // Prepare the request body for the save-ai-response endpoint
+      const baseUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.NODE_ENV === 'production'
+          ? 'https://thewaterbar.ae'
+          : `http://localhost:${process.env.PORT || 3000}`;
+
       const saveRequestBody = {
         user_id: userId,
         response_id: response_id,

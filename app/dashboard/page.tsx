@@ -371,7 +371,7 @@ function Dashboard() {
       setSessionConfig(prev => ({ ...prev, isCreatingSession: true }));
       
       // Validate user is logged in
-      if (!sessionEmail) {
+      if (!sessionEmail || !user?.id) {
         toast({
           title: "Not logged in",
           description: "Please log in to start a new session.",
@@ -392,12 +392,37 @@ function Dashboard() {
       const dayStartTime = new Date(wakeUpTime);
       dayStartTime.setHours(wakeUpTime.getHours() - sessionConfig.lookbackHours);
       
+      // Calculate targets FIRST to ensure they're valid
+      // Calculate LBM based on weight, sex, and body type
+      const lbm = calculateLBM(userProfile);
+      const baseWater = lbm * 30; // 30ml per kg LBM
+      const baseSodium = lbm * 24; // 24mg per kg LBM
+      const potassiumRatio = 2.5; // Consistent ratio
+      const basePotassium = baseSodium * potassiumRatio;
+      const proteinMultiplier = userProfile.doWeightTraining ? 1.8 : 1.3;
+      const proteinTarget = lbm * proteinMultiplier;
+      
+      // Format targets
+      const targets = {
+        water_ml: Math.round(baseWater),
+        sodium_mg: Math.round(baseSodium),
+        potassium_mg: Math.round(basePotassium),
+        protein_g: Math.round(proteinTarget)
+      };
+      
+      // Validate targets are reasonable
+      if (targets.water_ml < 100 || targets.sodium_mg < 100) {
+        throw new Error("Invalid target calculations. Please check your profile data.");
+      }
+      
+      console.log('Calculated hydration targets:', targets);
+      
       // Create a new hydration session in the database
       const { data: newSession, error } = await supabase
         .from('hydration_sessions')
         .insert([
           {
-            user_id: user?.id,
+            user_id: user.id,
             start_time: new Date().toISOString(),
             is_active: true,
             day_start_time: dayStartTime.toISOString(),
@@ -421,26 +446,25 @@ function Dashboard() {
         wakeUpTime: newSession.wake_up_time
       });
       
-      // Calculate hydration targets based on user profile
-      calculateHydrationTargets(userProfile);
-      
       // Create a daily target entry linked to this session
       const { error: targetError } = await supabase
         .from('daily_targets')
         .insert([
           {
-            user_id: user?.id,
+            user_id: user.id,
             session_id: newSession.id,
-            water_ml: dailyTarget.water_ml,
-            protein_g: dailyTarget.protein_g,
-            sodium_mg: dailyTarget.sodium_mg,
-            potassium_mg: dailyTarget.potassium_mg
+            date: new Date().toISOString().split('T')[0],
+            ...targets
           }
         ]);
       
       if (targetError) {
         console.error('Error creating daily target:', targetError);
+        throw new Error(`Failed to create daily targets: ${targetError.message}`);
       }
+      
+      // Also update daily target state for backwards compatibility
+      setDailyTarget(targets);
       
       // Deactivate any previous active sessions
       const { error: updateError } = await supabase
@@ -1057,6 +1081,16 @@ function Dashboard() {
       // Debug: Log final water intake value before API call
       console.log(`FINAL water intake value being sent to API: ${actualWaterIntake}ml`);
       
+      // HYDRATION FLOW: Log current state variables for debugging
+      console.log("HYDRATION_FLOW: User profile and state variables", {
+        userProfile,
+        waterRemaining,
+        actualWaterIntake,
+        proteinIntake,
+        sodiumIntake,
+        potassiumIntake
+      });
+      
       // Prepare enhanced hydration data
       // Using type assertion to allow for extended properties
       interface EnhancedHydrationData {
@@ -1067,7 +1101,11 @@ function Dashboard() {
         potassiumIntake: number;
         userProfile: typeof userProfile;
         rawData?: any; // Allow optional raw data property
+        _flowMarker?: string; // Test marker for tracing data flow
       }
+      
+      // Add a unique flow marker for tracing this specific request through the system
+      const flowMarker = `HYDRATION_FLOW_TEST_${Date.now()}`;
       
       let enhancedHydrationData: EnhancedHydrationData = {
         currentWaterIntake: actualWaterIntake, 
@@ -1075,8 +1113,14 @@ function Dashboard() {
         proteinIntake: proteinIntake,
         sodiumIntake: sodiumIntake,
         potassiumIntake: potassiumIntake,
-        userProfile: userProfile
+        userProfile: userProfile,
+        _flowMarker: flowMarker // Add our test marker
       };
+      
+      console.log("HYDRATION_FLOW: Enhanced data with marker created", { 
+        marker: flowMarker,
+        data: enhancedHydrationData
+      });
       
       // Add raw data if available
       try {
@@ -1091,11 +1135,27 @@ function Dashboard() {
           if (rawData.targets?.water_ml) {
             enhancedHydrationData.targetWaterIntake = rawData.targets.water_ml;
           }
+          
+          console.log("HYDRATION_FLOW: Raw data fetched from API", {
+            marker: flowMarker,
+            hasRawData: !!enhancedHydrationData.rawData,
+            rawDataTargets: enhancedHydrationData.rawData?.targets,
+            timelineEventsCount: enhancedHydrationData.rawData?.timeline_events?.length
+          });
         }
       } catch (error) {
         console.error('Error enhancing hydration data:', error);
         // Continue with basic hydration data
       }
+      
+      // Log the final data being sent to the API
+      console.log("HYDRATION_FLOW: Sending data to recommendation API", {
+        marker: flowMarker,
+        requestBody: JSON.stringify({
+          userId: user.id,
+          hydrationData: enhancedHydrationData
+        }).substring(0, 200) + "..." // Log partial to avoid huge output
+      });
       
       // Call our API endpoint with calculated water intake (now enhanced)
       const response = await fetch('/api/recommend/gpt', {

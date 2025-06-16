@@ -7,6 +7,16 @@ export async function POST(request: Request) {
     const requestBody = await request.json();
     console.log('Full request body received:', requestBody);
     
+    // HYDRATION FLOW: Log incoming request details
+    const flowMarker = requestBody.hydrationData?._flowMarker;
+    console.log("HYDRATION_FLOW: API received request", {
+      flowMarker,
+      hasHydrationData: !!requestBody.hydrationData,
+      hasRawData: !!requestBody.hydrationData?.rawData,
+      hasDirectProps: !!(requestBody.hydrationData?.targetWaterIntake),
+      userId: requestBody.userId
+    });
+    
     // Extract userId and log it
     const { userId } = requestBody;
     console.log('Extracted userId:', userId);
@@ -47,13 +57,51 @@ export async function POST(request: Request) {
     const rawData = hydrationData.rawData || {};
     const timelineEvents = rawData.timeline_events || [];
     
-    // Extract targets from rawData or fall back to direct properties
-    const targets = rawData.targets || {
-      water_ml: hydrationData.targetWaterIntake || 0,
-      protein_g: hydrationData.proteinIntake || 0,
-      sodium_mg: hydrationData.sodiumIntake || 0,
-      potassium_mg: hydrationData.potassiumIntake || 0
-    };
+    // Extract targets from rawData - no fallbacks! Database is single source of truth
+    const targets = rawData.targets;
+    
+    // HYDRATION FLOW: Log target source determination
+    console.log("HYDRATION_FLOW: Target source determination", {
+      flowMarker,
+      usingRawDataTargets: !!rawData.targets,
+      rawDataTargetsExists: !!rawData.targets,
+      directPropsExist: {
+        targetWaterIntake: !!hydrationData.targetWaterIntake,
+        proteinIntake: !!hydrationData.proteinIntake,
+        sodiumIntake: !!hydrationData.sodiumIntake,
+        potassiumIntake: !!hydrationData.potassiumIntake
+      },
+      directProps: {
+        targetWaterIntake: hydrationData.targetWaterIntake,
+        proteinIntake: hydrationData.proteinIntake
+      },
+      rawTargets: rawData.targets
+    });
+    
+    // Error if no targets are available - the hydration raw-data endpoint should have returned an error
+    if (!targets) {
+      console.error('No hydration targets available for this session');
+      console.log("HYDRATION_FLOW: ERROR - No targets available", { flowMarker });
+      return NextResponse.json({
+        error: 'No hydration targets available. Please start a new hydration session.',
+        recommendation: {
+          message: "It looks like you don't have hydration targets set up. Please start a new hydration session to get personalized recommendations.",
+          response_id: null
+        }
+      }, { status: 400 });
+    }
+    
+    // HYDRATION FLOW: Log available timeline data
+    console.log("HYDRATION_FLOW: Timeline data analysis", {
+      flowMarker,
+      timelineEventsCount: timelineEvents.length,
+      hasTimelineEvents: timelineEvents.length > 0,
+      firstEventSample: timelineEvents.length > 0 ? {
+        type: timelineEvents[0].event_type,
+        time: timelineEvents[0].event_time,
+        hasInputLibrary: !!timelineEvents[0].input_library
+      } : null
+    });
     
     // Get input library (may be empty in the legacy format)
     const inputLibrary = rawData.input_library || [];
@@ -225,6 +273,14 @@ export async function POST(request: Request) {
     // NOTE: We're not including currentStatusContext anymore as it was using inconsistent data
     // The AI will infer progress directly from timeline events
       
+    // HYDRATION FLOW: Log the final data being sent to OpenAI
+    console.log("HYDRATION_FLOW: Sending to OpenAI", {
+      flowMarker,
+      targetsUsed: targets,
+      timelineEventsCount: timelineEvents.length,
+      promptPreview: coachSystemPrompt.substring(0, 100) + "..."
+    });
+    
     // Call OpenAI Responses API with personalized prompt including the input library
     const response = await openai.responses.create({
       model: 'gpt-4o-mini',
@@ -239,6 +295,13 @@ export async function POST(request: Request) {
       ${inputLibraryContext}
       
       Based on your timeline and targets, provide a friendly, actionable plan with specific suggestions on what to consume to meet your remaining nutrient goals today. Use ONLY items from the Available Food & Drink Options list. Keep it brief and engaging.`,
+    });
+    
+    // HYDRATION FLOW: Log the OpenAI response received
+    console.log("HYDRATION_FLOW: Received OpenAI response", {
+      flowMarker,
+      responseId: response.id,
+      responseReceived: !!response
     });
 
     // Extract the response text and response_id

@@ -116,20 +116,21 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: targetError.message }, { status: 500 });
     }
     
-    // 3. If no targets found, use default values based on average adult needs
-    const hydrationTargets = targets || {
-      water_ml: 2500,       // Default 2.5L per day
-      sodium_mg: 2300,      // Default sodium RDA
-      potassium_mg: 3500,   // Default potassium RDA
-      protein_g: 50         // Default protein
-    };
+    // 3. Check if targets were found, return error if not
+    if (!targets) {
+      console.error('[hydration-raw-data] No hydration targets found for this user/session');
+      return NextResponse.json(
+        { error: 'No hydration targets found. Please start a new session to calculate your targets.' },
+        { status: 404 }
+      );
+    }
     
     console.log(`[hydration-raw-data] Found ${timeline_events.length} timeline events and targets`);
     
     // 4. Return combined data
     return NextResponse.json({
       timeline_events,
-      targets: hydrationTargets
+      targets
     }, { status: 200 });
     
   } catch (error: any) {

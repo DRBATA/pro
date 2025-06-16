@@ -1139,7 +1139,13 @@ function Dashboard() {
         const rawDataUrl = `/api/hydration/raw-data?user_id=${user.id}`;
         console.log(`CRITICAL_DEBUG: Fetching from URL: ${rawDataUrl}`);
         
-        const rawDataResponse = await fetch(rawDataUrl);
+        const rawDataResponse = await fetch(rawDataUrl, {
+          // Add cache control to prevent stale data
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache'
+          }
+        });
         
         // Log the raw response details
         console.log('CRITICAL_DEBUG: Raw data response status:', {
@@ -1154,25 +1160,38 @@ function Dashboard() {
           console.log('CRITICAL_DEBUG: Raw data fetch successful', {
             hasTargets: !!rawData.targets,
             timelineEventsCount: rawData.timeline_events?.length || 0,
-            targets: rawData.targets
+            targets: rawData.targets,
+            requestId: rawData.requestId,
+            metadata: rawData.metadata
           });
           
           // Update hydration data with raw data
           enhancedHydrationData.rawData = rawData;
           
-          // If available, use DB targets as the source of truth
-          if (rawData.targets?.water_ml) {
+          // CRITICAL FIX: Always use DB targets, even if they're zeros
+          // This ensures we consistently use the database as source of truth
+          if (rawData.targets) {
             // Log the transition from frontend to DB targets
             console.log(`CRITICAL_DEBUG: Target transition:`, {
               oldWaterTarget: enhancedHydrationData.targetWaterIntake,
               newWaterTarget: rawData.targets.water_ml,
+              oldProteinTarget: enhancedHydrationData.proteinIntake,
+              newProteinTarget: rawData.targets.protein_g,
+              oldSodiumTarget: enhancedHydrationData.sodiumIntake,
+              newSodiumTarget: rawData.targets.sodium_mg,
+              oldPotassiumTarget: enhancedHydrationData.potassiumIntake, 
+              newPotassiumTarget: rawData.targets.potassium_mg,
               source: 'database'
             });
             
+            // Update all targets from database values
             enhancedHydrationData.targetWaterIntake = rawData.targets.water_ml;
+            enhancedHydrationData.proteinIntake = rawData.targets.protein_g;
+            enhancedHydrationData.sodiumIntake = rawData.targets.sodium_mg;
+            enhancedHydrationData.potassiumIntake = rawData.targets.potassium_mg;
           } else {
-            console.log('CRITICAL_DEBUG: No water_ml target in raw data, keeping frontend target', {
-              frontendTarget: enhancedHydrationData.targetWaterIntake
+            console.error('CRITICAL_DEBUG: No targets found in raw data response', {
+              rawDataResponse: rawData
             });
           }
           

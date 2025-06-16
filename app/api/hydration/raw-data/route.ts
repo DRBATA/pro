@@ -154,32 +154,49 @@ export async function GET(req: Request) {
       targetQuery = targetQuery.eq('target_date', today);
     }
     
-    const { data: targets, error: targetError } = await targetQuery.single();
+    let { data: targets, error: targetError } = await targetQuery.single();
       
     if (targetError && targetError.code !== 'PGRST116') { // Not found is ok, we'll use defaults
       console.error('[hydration-raw-data] Error fetching daily targets:', targetError);
       return NextResponse.json({ error: targetError.message }, { status: 500 });
     }
     
-    // 3. Check if targets were found, return error if not
     if (!targets) {
-      console.error('[hydration-raw-data] No hydration targets found for this user/session');
-      return NextResponse.json(
-        { error: 'No hydration targets found. Please start a new session to calculate your targets.' },
-        { status: 404 }
-      );
+      console.log('[hydration-raw-data] No hydration targets found for this user/session, returning default empty targets');
+      // Create empty targets instead of returning 404
+      targets = {
+        water_ml: 0,
+        sodium_mg: 0,
+        potassium_mg: 0,
+        protein_g: 0
+      };
+    } else {
+      console.log(`HYDRATION_DEBUG: [${requestId}] Found hydration targets for user ${user_id}:`, targets);
     }
     
-    console.log(`[hydration-raw-data] Found ${timeline_events.length} timeline events and targets`);
+    console.log(`HYDRATION_DEBUG: [${requestId}] Returning ${timeline_events.length} timeline events with targets:`, targets);
     
-    // 4. Return combined data
+    // Return the data with consistent formatting
     return NextResponse.json({
+      requestId,
+      targets,
       timeline_events,
-      targets
-    }, { status: 200 });
-    
+      // Include useful metadata
+      metadata: {
+        userIdUsed: user_id,
+        sessionIdUsed: sessionId || null,
+        dayStartTime: dayStartTime,
+        today: today,
+        timelineEventsFound: timeline_events.length,
+        hasTargets: !!targets
+      }
+    });
   } catch (error: any) {
-    console.error('[hydration-raw-data] Unexpected error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Catch any unexpected errors
+    console.error(`HYDRATION_DEBUG: [${requestId}] Unexpected error in raw-data endpoint:`, error);
+    return NextResponse.json({ 
+      error: error.message || 'Unexpected error processing hydration data',
+      requestId 
+    }, { status: 500 });
   }
 }

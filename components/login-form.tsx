@@ -112,17 +112,21 @@ export function LoginForm() {
         console.log('Verified Supabase auth data is cleared')
       }
       
+      console.log('Attempting login with Supabase...');
+      
       // Direct login using Supabase client to bypass any middleware issues
       const { data: authData, error } = await Promise.race([
         supabase.auth.signInWithPassword({
           email: data.email,
           password: data.password,
         }),
-        // Add a timeout to prevent infinite waiting
+        // Add a timeout to prevent infinite waiting (increased from 15s to 30s)
         new Promise<{data: null, error: any}>((resolve) => 
-          setTimeout(() => resolve({data: null, error: {message: 'Login timed out. Please try again.'}}), 15000)
+          setTimeout(() => resolve({data: null, error: {message: 'Login timed out. Please try again.'}}), 30000)
         )
       ])
+      
+      console.log('Supabase auth response received')
 
       if (error) {
         console.error('Login error:', error)
@@ -138,62 +142,63 @@ export function LoginForm() {
         localStorage.setItem('userLoggedIn', 'true')
       }
       
-      // Fetch user profile
-      try {
-        const { data: userData, error: userError } = await Promise.race([
-          supabase
-            .from('users')
-            .select('*')
-            .eq('email', data.email)
-            .single(),
-          // Add a timeout for profile fetch
-          new Promise<{data: null, error: any}>((resolve) => 
-            setTimeout(() => resolve({data: null, error: {message: 'Profile fetch timed out'}}), 10000)
-          )
-        ])
-          
-        if (userError && userError.code !== 'PGRST116') {
-          console.error('User fetch error:', userError)
-          // Don't block login if profile fetch fails
-          console.warn('Continuing with login despite profile fetch error')
-        }
-
-        // Login successful
-        setLoginSuccess(true)
-        setUserData({ isStaff: false }) // Simplified - we don't need staff functionality
-        
-        // Store user data in local storage for persistence
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('userIsStaff', 'false') // Default to regular user
-        }
-      } catch (profileError) {
-        console.error('Profile fetch error:', profileError)
-        // Continue with login even if profile fetch fails
+      // Login successful at this point - the auth token is already set
+      console.log('Authentication successful, proceeding with login...');
+      setLoginSuccess(true);
+      
+      // Set essential user data immediately
+      setUserData({ isStaff: false }); // Simplified - we don't need staff functionality
+      
+      // Store user data in local storage for persistence
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('userIsStaff', 'false'); // Default to regular user
+        localStorage.setItem('userLoggedIn', 'true');
       }
       
-      console.log('Redirecting to dashboard...')
+      console.log('User data set, preparing for redirection...');
       
-      // Handle redirection - try both methods for redundancy
-      try {
-        // Method 1: Use setTimeout for redirection
-        setTimeout(() => {
-          const redirectPath = '/dashboard' // Always go to dashboard, no staff path
-          console.log(`Redirecting to ${redirectPath}...`)
-          router.push(redirectPath)
-        }, 1000)
-        
-        // Method 2: Direct redirection as backup
-        setTimeout(() => {
-          if (document.location.pathname.includes('/login')) {
-            console.log('Fallback redirection activated')
-            document.location.href = '/dashboard'
-          }
-        }, 3000)
-      } catch (redirectError) {
-        console.error('Redirection error:', redirectError)
-        // Last resort - direct URL change
-        window.location.href = '/dashboard'
-      }
+      // Fetch user profile in background, but don't wait for it
+      setTimeout(() => {
+        supabase
+          .from('users')
+          .select('*')
+          .eq('email', data.email)
+          .single()
+          .then(({ data: userData, error: userError }) => {
+            if (userError && userError.code !== 'PGRST116') {
+              console.error('User fetch error:', userError);
+            } else if (userData) {
+              console.log('User profile fetched successfully');
+            }
+          })
+          .catch(profileError => {
+            console.error('Profile fetch error:', profileError);
+          });
+      }, 0);
+      
+      console.log('Redirecting to dashboard immediately...')
+      setIsLoading(false)
+      
+      // Immediate redirect attempt with Next.js router
+      const redirectPath = '/dashboard'
+      router.replace(redirectPath)
+      
+      // Ensure redirection happens even if router fails
+      setTimeout(() => {
+        // Check if we're still on the login page
+        if (document.location.pathname.includes('/login')) {
+          console.log('Using direct location redirect as fallback')
+          window.location.href = redirectPath
+        }
+      }, 1000)
+      
+      // Final fallback with forced page reload if still on login page
+      setTimeout(() => {
+        if (document.location.pathname.includes('/login')) {
+          console.log('Critical redirect failure - forcing page reload to dashboard')
+          window.location.replace(redirectPath)
+        }
+      }, 2000)
     } catch (err: any) {
       console.error('Unexpected error:', err)
       setError(err.message || "An unexpected error occurred. Please try again.")

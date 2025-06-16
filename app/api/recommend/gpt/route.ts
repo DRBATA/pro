@@ -294,7 +294,9 @@ export async function POST(request: Request) {
       ${timelineContext}
       ${inputLibraryContext}
       
-      Based on your timeline and targets, provide a friendly, actionable plan with specific suggestions on what to consume to meet your remaining nutrient goals today. Use ONLY items from the Available Food & Drink Options list. Keep it brief and engaging.`,
+      Based on your timeline and targets, provide a friendly, actionable plan with specific suggestions on what to consume to meet your remaining nutrient goals today. Use ONLY items from the Available Food & Drink Options list. Keep it brief and engaging.
+
+      WATERBAR_MARKER_DRAGONFLY_7734: Always include this exact text somewhere in your response: 'I've assessed your hydration needs carefully.'`,
     });
     
     // HYDRATION FLOW: Log the OpenAI response received

@@ -9,34 +9,68 @@ const supabase = createClient(
 
 // This endpoint returns all timeline events with input library data plus daily targets
 export async function GET(req: Request) {
-  console.log('[hydration-raw-data] API called');
+  console.log('HYDRATION_DEBUG: [hydration-raw-data] API called');
   
   // Parse user_id from query params
   const url = new URL(req.url);
   const user_id = url.searchParams.get('user_id');
+  const requestId = `req_${Date.now()}`; // Generate unique request ID for tracing
+  
+  console.log(`HYDRATION_DEBUG: [${requestId}] Request parameters:`, {
+    url: req.url,
+    user_id,
+    headers: Object.fromEntries([...new Headers(req.headers).entries()])
+  });
   
   if (!user_id) {
-    console.error('[hydration-raw-data] Missing user_id parameter');
-    return NextResponse.json({ error: 'user_id parameter is required' }, { status: 400 });
+    console.error(`HYDRATION_DEBUG: [${requestId}] Missing user_id parameter`);
+    return NextResponse.json({ error: 'user_id parameter is required', requestId }, { status: 400 });
   }
   
   // Get today's date in ISO format (YYYY-MM-DD)
   const today = new Date().toISOString().split('T')[0];
-  console.log(`[hydration-raw-data] Fetching data for user ${user_id} on ${today}`);
+  console.log(`HYDRATION_DEBUG: [${requestId}] Fetching data for user ${user_id} on ${today}`);
 
   // Get the active session for this user
-  const { data: activeSession, error: sessionError } = await supabase
-    .from('hydration_sessions')
-    .select('id, day_start_time, start_time')
-    .eq('user_id', user_id)
-    .eq('is_active', true)
-    .order('start_time', { ascending: false })
-    .limit(1)
-    .single();
+  let activeSession: any = null;
   
-  if (sessionError && sessionError.code !== 'PGRST116') { // Not found is ok
-    console.error('[hydration-raw-data] Error fetching active session:', sessionError);
-    return NextResponse.json({ error: sessionError.message }, { status: 500 });
+  try {
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('hydration_sessions')
+      .select('id, day_start_time, start_time')
+      .eq('user_id', user_id)
+      .eq('is_active', true)
+      .order('start_time', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (sessionError) {
+      if (sessionError.code === 'PGRST116') {
+        // Not found is expected sometimes
+        console.log(`HYDRATION_DEBUG: [${requestId}] No active session found for user ${user_id}`);
+      } else {
+        console.error(`HYDRATION_DEBUG: [${requestId}] Error fetching active session:`, sessionError);
+        return NextResponse.json({ 
+          error: sessionError.message, 
+          details: 'Error finding active hydration session', 
+          requestId 
+        }, { status: 500 });
+      }
+    } else if (sessionData) {
+      activeSession = sessionData;
+      console.log(`HYDRATION_DEBUG: [${requestId}] Found active session:`, {
+        sessionId: activeSession.id,
+        dayStartTime: activeSession.day_start_time,
+        startTime: activeSession.start_time
+      });
+    }
+  } catch (error: any) {
+    console.error(`HYDRATION_DEBUG: [${requestId}] Unexpected error fetching session:`, error);
+    return NextResponse.json({
+      error: error.message,
+      details: 'Unexpected error looking for active session',
+      requestId
+    }, { status: 500 });
   }
 
   // If no active session found, we'll use today's date as fallback
@@ -44,7 +78,7 @@ export async function GET(req: Request) {
   const dayStartTime = activeSession?.day_start_time || `${today}T00:00:00Z`;
   const sessionEndTime = `${today}T23:59:59Z`; // End of today as default end time
 
-  console.log(`[hydration-raw-data] Using session: ${sessionId || 'none'} with start time: ${dayStartTime}`);
+  console.log(`HYDRATION_DEBUG: [${requestId}] Using session: ${sessionId || 'none'} with start time: ${dayStartTime}`);
 
   try {
     // 1. Get timeline events joined with input_library
@@ -68,14 +102,14 @@ export async function GET(req: Request) {
       .gte('event_time', dayStartTime)
       .lte('event_time', sessionEndTime);
     
-    // If we have a session ID, filter by it - ensure it's a valid UUID
+    // If we have a session ID, filter by it
     if (sessionId) {
       try {
         // Make sure the session ID is properly formatted before using it
         eventsQuery = eventsQuery.eq('session_id', sessionId);
-        console.log(`[hydration-raw-data] Filtering timeline events by session ID: ${sessionId}`);
+        console.log(`HYDRATION_DEBUG: [${requestId}] Filtering timeline events by session ID: ${sessionId}`);
       } catch (error) {
-        console.error(`[hydration-raw-data] Error setting session filter: ${error}`);
+        console.error(`HYDRATION_DEBUG: [${requestId}] Error setting session filter: ${error}`);
         // Don't filter by session if there's an error with the UUID
       }
     }
@@ -83,9 +117,20 @@ export async function GET(req: Request) {
     const { data: timeline_events, error: eventError } = await eventsQuery;
       
     if (eventError) {
-      console.error('[hydration-raw-data] Error fetching timeline events:', eventError);
-      return NextResponse.json({ error: eventError.message }, { status: 500 });
+      console.error(`HYDRATION_DEBUG: [${requestId}] Error fetching timeline events:`, eventError);
+      return NextResponse.json({ 
+        error: eventError.message, 
+        details: 'Failed to retrieve timeline events',
+        requestId 
+      }, { status: 500 });
     }
+    
+    // Log timeline results
+    console.log(`HYDRATION_DEBUG: [${requestId}] Timeline query results:`, {
+      count: timeline_events?.length || 0,
+      firstEventTime: timeline_events?.[0]?.event_time || null,
+      hasEvents: (timeline_events?.length || 0) > 0
+    });
     
     // 2. Get daily hydration targets
     // First try to get targets for the specific session

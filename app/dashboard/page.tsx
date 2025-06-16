@@ -1124,16 +1124,56 @@ function Dashboard() {
       
       // Add raw data if available
       try {
-        const rawDataResponse = await fetch(`/api/hydration/raw-data?user_id=${user.id}`);
+        console.log(`CRITICAL_DEBUG: Attempting to fetch raw data for user ${user?.id}`);
+        
+        // Check if user ID is valid before making request
+        if (!user?.id) {
+          console.error('CRITICAL_DEBUG: Cannot fetch raw data - user ID is missing');
+          throw new Error('User ID is missing');
+        }
+        
+        // No session ID data available at this point, will log user ID only
+        console.log(`CRITICAL_DEBUG: Using user ID: ${user.id} for raw data fetch`);
+        
+        // Make the request with detailed error handling
+        const rawDataUrl = `/api/hydration/raw-data?user_id=${user.id}`;
+        console.log(`CRITICAL_DEBUG: Fetching from URL: ${rawDataUrl}`);
+        
+        const rawDataResponse = await fetch(rawDataUrl);
+        
+        // Log the raw response details
+        console.log('CRITICAL_DEBUG: Raw data response status:', {
+          status: rawDataResponse.status,
+          statusText: rawDataResponse.statusText,
+          url: rawDataUrl,
+          headers: Object.fromEntries([...rawDataResponse.headers.entries()])
+        });
+        
         if (rawDataResponse.ok) {
           const rawData = await rawDataResponse.json();
-          console.log('Including raw hydration data in AI request');
+          console.log('CRITICAL_DEBUG: Raw data fetch successful', {
+            hasTargets: !!rawData.targets,
+            timelineEventsCount: rawData.timeline_events?.length || 0,
+            targets: rawData.targets
+          });
+          
           // Update hydration data with raw data
           enhancedHydrationData.rawData = rawData;
           
           // If available, use DB targets as the source of truth
           if (rawData.targets?.water_ml) {
+            // Log the transition from frontend to DB targets
+            console.log(`CRITICAL_DEBUG: Target transition:`, {
+              oldWaterTarget: enhancedHydrationData.targetWaterIntake,
+              newWaterTarget: rawData.targets.water_ml,
+              source: 'database'
+            });
+            
             enhancedHydrationData.targetWaterIntake = rawData.targets.water_ml;
+          } else {
+            console.log('CRITICAL_DEBUG: No water_ml target in raw data, keeping frontend target', {
+              frontendTarget: enhancedHydrationData.targetWaterIntake
+            });
           }
           
           console.log("HYDRATION_FLOW: Raw data fetched from API", {
@@ -1142,10 +1182,35 @@ function Dashboard() {
             rawDataTargets: enhancedHydrationData.rawData?.targets,
             timelineEventsCount: enhancedHydrationData.rawData?.timeline_events?.length
           });
+        } else {
+          // Try to read the error response
+          try {
+            const errorText = await rawDataResponse.text();
+            const errorData = JSON.parse(errorText);
+            console.error(`CRITICAL_DEBUG: Raw data fetch failed:`, {
+              status: rawDataResponse.status,
+              error: errorData,
+              userId: user.id
+            });
+          } catch (parseError) {
+            // If JSON parsing fails, log the raw text
+            const errorText = await rawDataResponse.text();
+            console.error(`CRITICAL_DEBUG: Raw data fetch failed with non-JSON response:`, {
+              status: rawDataResponse.status,
+              errorText,
+              parseError
+            });
+          }
         }
       } catch (error) {
-        console.error('Error enhancing hydration data:', error);
+        console.error('CRITICAL_DEBUG: Error enhancing hydration data:', error);
         // Continue with basic hydration data
+        console.log('CRITICAL_DEBUG: Continuing with frontend-calculated targets', {
+          targetWaterIntake: enhancedHydrationData.targetWaterIntake,
+          proteinIntake: enhancedHydrationData.proteinIntake,
+          sodiumIntake: enhancedHydrationData.sodiumIntake,
+          potassiumIntake: enhancedHydrationData.potassiumIntake
+        });
       }
       
       // Log the final data being sent to the API

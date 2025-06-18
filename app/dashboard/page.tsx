@@ -985,9 +985,9 @@ function Dashboard() {
         console.log(`Fetching timeline events for user ${user.id} since ${today}`);
         const { data: events, error: eventsError } = await supabase
           .from('timeline_events')
-          .select('input_item_id, quantity, created_at, amount, type')
+          .select('input_item_id, event_time, event_type')
           .eq('user_id', user.id)
-          .gte('created_at', today);
+          .gte('event_time', today);
           
         if (eventsError) {
           console.error('Error fetching timeline events:', eventsError);
@@ -997,15 +997,8 @@ function Dashboard() {
           console.log(`Found ${events.length} timeline events`);
           console.log('Timeline events:', JSON.stringify(events, null, 2));
           
-          // Directly use the amount field from timeline events
-          events.forEach(event => {
-            // Check if this is a water event with an amount
-            if (event.amount && event.type === 'water') {
-              const waterAmount = Number(event.amount) || 0;
-              actualWaterIntake += waterAmount;
-              console.log(`Water event: ${waterAmount}ml, Running total: ${actualWaterIntake}ml`);
-            }
-          });
+          // Skip direct water intake calculation since we're not querying those fields
+          console.log(`Found ${events.length} timeline events for today`);
           
           console.log(`Total water intake from timeline: ${actualWaterIntake}ml`);
           
@@ -1030,7 +1023,7 @@ function Dashboard() {
                 
                 events.forEach(event => {
                   const item = items.find(i => i.id === event.input_item_id);
-                  if (item && event.quantity) {
+                  if (item) {
                     // Calculate water intake from compartment fields
                     let itemWaterTotal = 0;
                     
@@ -1074,10 +1067,9 @@ function Dashboard() {
                       } catch (e) { console.error('Error parsing ACF:', e); }
                     } catch (e) { console.error('Error processing compartments:', e); }
                     
-                    // Multiply by quantity and add to total
-                    const eventWater = itemWaterTotal * event.quantity;
-                    actualWaterIntake += eventWater;
-                    console.log(`Item ${item.id}: Water per unit: ${itemWaterTotal}ml, Quantity: ${event.quantity}, Added: ${eventWater}ml`);
+                    // Add water amount directly without quantity multiplication
+                    actualWaterIntake += itemWaterTotal;
+                    console.log(`Item ${item.id}: Water content: ${itemWaterTotal}ml, Added to total`);
                   }
                 });
                 console.log(`Total calculated water intake: ${actualWaterIntake}ml`);

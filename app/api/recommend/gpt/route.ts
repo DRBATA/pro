@@ -303,7 +303,7 @@ console.log(`HYDRATION_DEBUG: [${requestId}] Hydration status for recommendation
 
 // Call OpenAI Responses API with personalized prompt including the input library
 const response = await openai.responses.create({
-  model: 'gpt-4o-mini',
+  model: 'gpt-4.1-nano',
   input: `${coachSystemPrompt}
 
   Hello ${name}! I'm your hydration and nutrition coach from Water Bar.
@@ -336,7 +336,7 @@ console.log(`HYDRATION_DEBUG: [${requestId}] Prompt construction details`, {
 console.log(`HYDRATION_DEBUG: [${requestId}] OpenAI API response received`, {
   responseId: response.id,
   responseReceived: !!response,
-  modelUsed: 'gpt-4o-mini'
+  modelUsed: 'gpt-4.1-nano'
 });
 
 // Extract the response text and response_id

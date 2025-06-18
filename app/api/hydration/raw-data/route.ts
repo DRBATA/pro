@@ -175,8 +175,9 @@ export async function GET(req: Request) {
         filters: {
           user_id,
           session_id: sessionId || null,
-          date: sessionId ? null : today
-        }
+          date: today // Always log the date for clarity, even if using session_id in query
+        },
+        queryMethod: sessionId ? 'by_session_id' : 'by_date'
       }
     });
       

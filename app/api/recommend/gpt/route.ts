@@ -340,12 +340,25 @@ console.log(`HYDRATION_DEBUG: [${requestId}] OpenAI API response received`, {
 });
 
 // Extract the response text and response_id
+// Handle both string and object response formats from OpenAI API
 let message = "";
+if (typeof response.text === 'string') {
+  message = response.text;
+} else if (response.text && typeof response.text === 'object') {
+  // Handle ResponseTextConfig object by using toString() or JSON.stringify as a fallback
+  message = String(response.text) || JSON.stringify(response.text) || "";
+}
+
+// Ensure we have a fallback message if extraction fails
+if (!message) {
+  message = "I couldn't generate a specific recommendation with the available data";
+}
+
 const response_id = response.id;
 
 // HYDRATION_DEBUG: Log successful recommendation generation with target values
 console.log(`HYDRATION_DEBUG: [${requestId}] Recommendation generated successfully`, {
-  messageLength: message?.length || 0,
+  messageLength: typeof message === 'string' ? message.length : 0,
   responseId: response_id,
   targetsUsed: {
     water_ml: targets.water_ml || 0,

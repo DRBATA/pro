@@ -59,7 +59,7 @@ export async function POST(req: Request) {
         event_type: 'ai_response',
         event_time: new Date().toISOString(),
         response_id,
-        notes: message,
+        notes: typeof message === 'string' ? message : JSON.stringify(message) || 'AI recommendation',
       })
       .select()
       .single();

@@ -447,7 +447,16 @@ function Dashboard() {
       });
       
       // Create a daily target entry linked to this session
-      const { error: targetError } = await supabase
+      // HYDRATION_DEBUG: Log target creation attempt details
+      const requestId = `req_${Date.now()}`;
+      console.log(`HYDRATION_DEBUG: [${requestId}] Attempting to create daily targets`, {
+        user_id: user.id,
+        session_id: newSession.id, 
+        date: new Date().toISOString().split('T')[0],
+        targets
+      });
+      
+      const { data: insertedTarget, error: targetError } = await supabase
         .from('daily_targets')
         .insert([
           {
@@ -456,12 +465,21 @@ function Dashboard() {
             date: new Date().toISOString().split('T')[0],
             ...targets
           }
-        ]);
+        ])
+        .select(); // Return the created record
       
       if (targetError) {
-        console.error('Error creating daily target:', targetError);
+        console.error(`HYDRATION_DEBUG: [${requestId}] Error creating daily target:`, targetError);
         throw new Error(`Failed to create daily targets: ${targetError.message}`);
       }
+      
+      // HYDRATION_DEBUG: Log successful target creation
+      console.log(`HYDRATION_DEBUG: [${requestId}] Daily targets created successfully`, {
+        insertedRecord: insertedTarget,
+        targetId: insertedTarget?.[0]?.id,
+        userId: insertedTarget?.[0]?.user_id,
+        sessionId: insertedTarget?.[0]?.session_id
+      });
       
       // Also update daily target state for backwards compatibility
       setDailyTarget(targets);

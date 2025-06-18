@@ -51,11 +51,23 @@ export async function POST(request: Request) {
     console.log('Using session ID:', sessionId);
     
     // Extract hydration data from the request body
-    const hydrationData = requestBody.hydrationData || {};
-    
-    // Get timeline events and targets from raw data
+    const hydrationData = requestBody.hydrationData;
     const rawData = hydrationData.rawData || {};
-    const timelineEvents = rawData.timeline_events || [];
+    
+    // HYDRATION_DEBUG: Add detailed logging for incoming data
+    const requestId = `req_${Date.now()}`;
+    console.log(`HYDRATION_DEBUG: [${requestId}] GPT recommendation request received`, {
+      hasHydrationData: !!hydrationData,
+      hasRawData: !!rawData, 
+      rawDataContainsTargets: !!rawData.targets,
+      rawDataTargets: rawData.targets || null,
+      directProps: {
+        targetWaterIntake: hydrationData.targetWaterIntake,
+        proteinIntake: hydrationData.proteinIntake,
+        sodiumIntake: hydrationData.sodiumIntake,
+        potassiumIntake: hydrationData.potassiumIntake
+      }
+    });
     
     // Extract targets from rawData - no fallbacks! Database is single source of truth
     const targets = rawData.targets;
@@ -90,6 +102,9 @@ export async function POST(request: Request) {
         }
       }, { status: 400 });
     }
+    
+    // Extract timeline events from rawData
+    const timelineEvents = rawData.timeline_events || [];
     
     // HYDRATION FLOW: Log available timeline data
     console.log("HYDRATION_FLOW: Timeline data analysis", {
@@ -246,157 +261,102 @@ export async function POST(request: Request) {
             // Add the formatted item
             inputLibraryContext += `- ${item.name} ${nutritionalDetails}\n`;
           });
-        }
-      });
-    }
-    
-    // Setup context based on user's name and daily targets
-    const userContext = hydrationData.userProfile?.name
-      ? `User's name: ${hydrationData.userProfile.name}\n`
-      : '';
-      
-    // Log the source of targets for debugging
-    if (rawData.targets) {
-      console.log('Using targets from rawData.targets (database source)');
-    } else {
-      console.log('Using targets from direct hydrationData properties (frontend calculations)');
-    }
-    console.log('Using targets:', targets);
-    
-    // Format the targets for the AI prompt
-    const targetsContext = `Daily targets:\n` +
-      `- Water: ${targets.water_ml || 0} ml\n` +
-      `- Protein: ${targets.protein_g || 0} g\n` +
-      `- Sodium: ${targets.sodium_mg || 0} mg\n` +
-      `- Potassium: ${targets.potassium_mg || 0} mg\n`;
-    
-    // NOTE: We're not including currentStatusContext anymore as it was using inconsistent data
-    // The AI will infer progress directly from timeline events
-      
-    // HYDRATION FLOW: Log the final data being sent to OpenAI
-    console.log("HYDRATION_FLOW: Sending to OpenAI", {
-      flowMarker,
-      targetsUsed: targets,
-      timelineEventsCount: timelineEvents.length,
-      promptPreview: coachSystemPrompt.substring(0, 100) + "..."
-    });
-    
-    // Call OpenAI Responses API with personalized prompt including the input library
-    const response = await openai.responses.create({
-      model: 'gpt-4o-mini',
-      input: `${coachSystemPrompt}
+// HYDRATION_DEBUG: Log detailed target values being used for recommendation
+console.log(`HYDRATION_DEBUG: [${requestId}] Using targets for recommendation`, {
+  targets: {
+    water_ml: targets.water_ml || 0,
+    protein_g: targets.protein_g || 0,
+    sodium_mg: targets.sodium_mg || 0,
+    potassium_mg: targets.potassium_mg || 0
+  },
+  sessionId,
+  userId
+});
 
-      Hello ${name}! I'm your hydration and nutrition coach from Water Bar.
-      
-      Here's your information for today:
-      ${userContext}
-      ${targetsContext}
-      ${timelineContext}
-      ${inputLibraryContext}
-      
-      Based on your timeline and targets, provide a friendly, actionable plan with specific suggestions on what to consume to meet your remaining nutrient goals today. Use ONLY items from the Available Food & Drink Options list. Keep it brief and engaging.
+// Format the targets for the AI prompt
+const targetsContext = `Daily targets:\n` +
+  `- Water: ${targets.water_ml || 0} ml\n` +
+  `- Protein: ${targets.protein_g || 0} g\n` +
+  `- Sodium: ${targets.sodium_mg || 0} mg\n` +
+  `- Potassium: ${targets.potassium_mg || 0} mg\n`;
 
-      WATERBAR_MARKER_DRAGONFLY_7734: Always include this exact text somewhere in your response: 'I've assessed your hydration needs carefully.'`,
-    });
-    
-    // HYDRATION FLOW: Log the OpenAI response received
-    console.log("HYDRATION_FLOW: Received OpenAI response", {
-      flowMarker,
-      responseId: response.id,
-      responseReceived: !!response
-    });
+// Setup context based on user's name (if available)
+const userContext = hydrationData.userProfile?.name
+  ? `User's name: ${hydrationData.userProfile.name}\n`
+  : '';
 
-    // Extract the response text and response_id
-    let message = "";
-    const response_id = response.id;
-    
-    // Extract text from response using a safer approach that's compatible with TypeScript
-    try {
-      // Access response.output safely with type assertions
-      const output = response.output as any[];
-      if (output && output.length > 0) {
-        const firstOutput = output[0];
-        
-        // Handle different response formats
-        if (firstOutput && typeof firstOutput === 'object') {
-          // For message format with content array
-          if (firstOutput.content && Array.isArray(firstOutput.content) && firstOutput.content.length > 0) {
-            const firstContent = firstOutput.content[0];
-            if (firstContent && firstContent.text) {
-              message = firstContent.text;
-            }
-          } 
-          // Sometimes the response might be structured differently
-          else if (firstOutput.text && typeof firstOutput.text === 'string') {
-            message = firstOutput.text;
-          }
-        }
-      }
-      
-      if (!message) {
-        console.warn('Could not extract message from response using expected structure:', JSON.stringify(response));
-        message = "Welcome! I'm your hydration coach. How can I help you today?";
-      }
-    } catch (error) {
-      console.error('Error extracting message from response:', error);
-      message = "Welcome! I'm your hydration coach. How can I help you today?";
-    }
-    
-    console.log('Generated response_id:', response_id);
-    
-    // Save the AI response to the timeline
-    try {
-      // Get the base URL for server-side API calls
-      const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
-      const host = process.env.VERCEL_URL || 'localhost:3000';
-      const baseUrl = process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : process.env.NODE_ENV === 'production'
-          ? 'https://thewaterbar.ae'
-          : `http://localhost:${process.env.PORT || 3000}`;
+// Construct the hydration status context for the prompt
+const hydrationStatus = hydrationData.currentWaterIntake !== undefined 
+  ? `Current hydration progress: ${hydrationData.currentWaterIntake} ml (out of ${targets.water_ml || 0} ml target)` 
+  : 'No current hydration data available';
 
-      const saveRequestBody = {
-        user_id: userId,
-        response_id: response_id,
-        message: message,
-        session_id: sessionId
-      };
-      
-      // Call the save-ai-response endpoint
-      console.log('Saving AI response to timeline:', saveRequestBody);
-      const saveResponse = await fetch(`${baseUrl}/api/hydration/save-ai-response`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(saveRequestBody)
-      });
-      
-      if (!saveResponse.ok) {
-        throw new Error(`Failed to save AI response: ${saveResponse.status}`);
-      }
-      
-      console.log('Successfully saved AI response to timeline');
-    } catch (error) {
-      // Log error but continue - we don't want to block the response if saving fails
-      console.error('Error saving AI response to timeline:', error);
-    }
+// HYDRATION_DEBUG: Log hydration progress data
+console.log(`HYDRATION_DEBUG: [${requestId}] Hydration status for recommendation`, {
+  currentWaterIntake: hydrationData.currentWaterIntake,
+  waterTarget: targets.water_ml || 0,
+  progressPercent: targets.water_ml ? Math.round((hydrationData.currentWaterIntake || 0) / targets.water_ml * 100) + '%' : 'N/A'
+});
 
-    return NextResponse.json({
-      recommendation: { 
-        message,
-        response_id 
-      }
-    });
+// Call OpenAI Responses API with personalized prompt including the input library
+const response = await openai.responses.create({
+  model: 'gpt-4o-mini',
+  input: `${coachSystemPrompt}
 
-  } catch (error) {
-    console.error('Error:', error);
-    // Fallback message if anything goes wrong
-    return NextResponse.json({
-      recommendation: {
-        message: "Welcome! I'm your hydration coach. I can help you stay properly hydrated throughout the day.",
-        response_id: null
-      }
-    });
+  Hello ${name}! I'm your hydration and nutrition coach from Water Bar.
+  
+  Here's your information for today:
+  ${userContext}
+  ${targetsContext}
+  ${timelineContext}
+  ${inputLibraryContext}
+  
+  Based on your timeline and targets, provide a friendly, actionable plan with specific suggestions on what to consume to meet your remaining nutrient goals today. Use ONLY items from the Available Food & Drink Options list. Keep it brief and engaging.
+
+  WATERBAR_MARKER_DRAGONFLY_7734: Always include this exact text somewhere in your response: 'I've assessed your hydration needs carefully.'`,
+});
+
+// HYDRATION_DEBUG: Log the constructed prompt details
+console.log(`HYDRATION_DEBUG: [${requestId}] Prompt construction details`, {
+  targetsIncluded: {
+    water_ml: targets.water_ml || 0,
+    protein_g: targets.protein_g || 0,
+    sodium_mg: targets.sodium_mg || 0,
+    potassium_mg: targets.potassium_mg || 0
+  },
+  timelineEventsCount: timelineEvents.length,
+  hasUserContext: !!userContext,
+  hasInputLibrary: inputLibraryContext ? inputLibraryContext.length > 10 : false
+});
+
+// HYDRATION_DEBUG: Log OpenAI API response received
+console.log(`HYDRATION_DEBUG: [${requestId}] OpenAI API response received`, {
+  responseId: response.id,
+  responseReceived: !!response,
+  modelUsed: 'gpt-4o-mini'
+});
+
+// Extract the response text and response_id
+let message = "";
+const response_id = response.id;
+
+// HYDRATION_DEBUG: Log successful recommendation generation with target values
+console.log(`HYDRATION_DEBUG: [${requestId}] Recommendation generated successfully`, {
+  messageLength: message?.length || 0,
+  responseId: response_id,
+  targetsUsed: {
+    water_ml: targets.water_ml || 0,
+    protein_g: targets.protein_g || 0,
+    sodium_mg: targets.sodium_mg || 0,
+    potassium_mg: targets.potassium_mg || 0
   }
+});
+
+// Return the recommendation to the client
+return NextResponse.json({
+  recommendation: { 
+    message,
+    response_id 
+  }
+});
+  } // End of try block
 }

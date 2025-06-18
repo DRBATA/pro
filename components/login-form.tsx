@@ -161,7 +161,7 @@ export function LoginForm() {
       setTimeout(() => {
         supabase
           .from('users')
-          .select('*')
+          .select('id, email, name, role')
           .eq('email', data.email)
           .single()
           .then(({ data: userData, error: userError }) => {
@@ -170,9 +170,11 @@ export function LoginForm() {
             } else if (userData) {
               console.log('User profile fetched successfully');
             }
+            // Don't return anything here
           })
-          .catch(profileError => {
+          .catch((profileError: Error) => {
             console.error('Profile fetch error:', profileError);
+            // Don't return anything here
           });
       }, 0);
       

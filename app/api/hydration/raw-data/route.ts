@@ -134,6 +134,13 @@ export async function GET(req: Request) {
     
     // 2. Get daily hydration targets
     // First try to get targets for the specific session
+    const formattedDate = today;
+    console.log(`HYDRATION_DEBUG: [${requestId}] Fetching targets for user ${user_id} on ${formattedDate}`, {
+      queryParams: { user_id, session_id: sessionId, date: formattedDate },
+      sessionPresent: !!sessionId,
+      lookupStrategy: sessionId ? 'by_session_id' : 'by_date'
+    });
+    
     let targetQuery = supabase
       .from('daily_targets')
       .select('water_ml, sodium_mg, potassium_mg, protein_g')
@@ -143,6 +150,7 @@ export async function GET(req: Request) {
       // If we have a session, try to get targets for that session
       try {
         targetQuery = targetQuery.eq('session_id', sessionId);
+        console.log(`HYDRATION_DEBUG: [${requestId}] Filtering daily targets by session ID: ${sessionId}`);
         console.log(`[hydration-raw-data] Filtering daily targets by session ID: ${sessionId}`);
       } catch (error) {
         console.error(`[hydration-raw-data] Error setting session filter for targets: ${error}`);
@@ -155,14 +163,30 @@ export async function GET(req: Request) {
     }
     
     let { data: targets, error: targetError } = await targetQuery.single();
+    
+    // HYDRATION_DEBUG: Log query results with detailed info
+    console.log(`HYDRATION_DEBUG: [${requestId}] Daily targets query result:`, { 
+      hasTargets: !!targets,
+      hasError: !!targetError,
+      errorCode: targetError?.code,
+      targets: targets || null,
+      query: {
+        table: 'daily_targets',
+        filters: {
+          user_id,
+          session_id: sessionId || null,
+          date: sessionId ? null : today
+        }
+      }
+    });
       
     if (targetError && targetError.code !== 'PGRST116') { // Not found is ok, we'll use defaults
-      console.error('[hydration-raw-data] Error fetching daily targets:', targetError);
+      console.error(`HYDRATION_DEBUG: [${requestId}] Error fetching daily targets:`, targetError);
       return NextResponse.json({ error: targetError.message }, { status: 500 });
     }
     
     if (!targets) {
-      console.log('[hydration-raw-data] No hydration targets found for this user/session, returning default empty targets');
+      console.log(`HYDRATION_DEBUG: [${requestId}] No hydration targets found for this user/session, returning default empty targets`);
       // Create empty targets instead of returning 404
       targets = {
         water_ml: 0,
@@ -170,6 +194,8 @@ export async function GET(req: Request) {
         potassium_mg: 0,
         protein_g: 0
       };
+      
+      console.log(`HYDRATION_DEBUG: [${requestId}] Created default zero targets:`, targets);
     } else {
       console.log(`HYDRATION_DEBUG: [${requestId}] Found hydration targets for user ${user_id}:`, targets);
     }

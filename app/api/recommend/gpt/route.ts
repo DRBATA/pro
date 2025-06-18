@@ -261,8 +261,12 @@ export async function POST(request: Request) {
             // Add the formatted item
             inputLibraryContext += `- ${item.name} ${nutritionalDetails}\n`;
           });
-// HYDRATION_DEBUG: Log detailed target values being used for recommendation
-console.log(`HYDRATION_DEBUG: [${requestId}] Using targets for recommendation`, {
+        }
+      });
+    }
+    
+    // HYDRATION_DEBUG: Log detailed target values being used for recommendation
+    console.log(`HYDRATION_DEBUG: [${requestId}] Using targets for recommendation`, {
   targets: {
     water_ml: targets.water_ml || 0,
     protein_g: targets.protein_g || 0,
@@ -359,4 +363,14 @@ return NextResponse.json({
   }
 });
   } // End of try block
+  catch (error) {
+    console.error(`HYDRATION_ERROR: Error generating recommendation:`, error);
+    return NextResponse.json({
+      error: 'Failed to generate hydration recommendation',
+      recommendation: {
+        message: "I'm sorry, I couldn't generate a hydration recommendation at this time. Please try again later.",
+        response_id: null
+      }
+    }, { status: 500 });
+  }
 }
